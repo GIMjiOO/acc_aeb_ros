@@ -1,0 +1,2 @@
+acc_aeb_controller:npust_bus_msgs:pro_can
+-DCATKIN_DEVEL_PREFIX=/home/nvidia/catkin_ws00/devel -DCMAKE_INSTALL_PREFIX=/home/nvidia/catkin_ws00/install -DCATKIN_WHITELIST_PACKAGES=acc_aeb_controller;npust_bus_msgs;pro_can -G Unix Makefiles

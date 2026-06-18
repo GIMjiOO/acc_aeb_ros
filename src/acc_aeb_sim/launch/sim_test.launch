@@ -1,0 +1,32 @@
+<launch>
+  <!-- [TEMP SIM] sim_test.launch — bench test for ACC/AEB v15.3 logic.
+       Do NOT run on the vehicle. Remove this package before vehicle deployment.
+
+  Usage:
+    roslaunch acc_aeb_sim sim_test.launch scenario:=2
+
+  Scenarios:
+    0  FREE_CRUISE      No obstacle; verify cruise to 25 km/h
+    1  FOLLOW_STEADY    Slow obstacle at 20 m; verify gap maintenance
+    2  WARN_AEB_STOP    Stationary obstacle; verify CRUISE->FOLLOW->WARN->AEB->stop
+    3  EMERGENCY_AEB    Obstacle at 12 m at 40 km/h; verify bypass-confirm AEB
+    4  VCU_DROPOUT      VCU silent for 0.8 s -> FAULT -> recovery
+    5  OBJ_DROPOUT      Object tracker silent for 0.6 s -> FAULT -> recovery
+
+  Watchdog test (scenario-independent):
+    Add <param name="debug_stall_once_s" value="0.5"/> inside the controller node
+    in acc_aeb_controller.launch to stall the control thread and exercise the
+    watchdog -> safe-stop path. Remove after bench testing. -->
+
+  <arg name="scenario"    default="2"    doc="Scenario index 0-5"/>
+
+  <!-- ACC/AEB controller -->
+  <include file="$(find acc_aeb_controller)/launch/acc_aeb_controller.launch"/>
+
+  <!-- [TEMP SIM] Closed-loop simulation node -->
+  <node pkg="acc_aeb_sim" type="acc_aeb_sim_node.py" name="acc_aeb_sim" output="screen">
+    <param name="scenario" value="$(arg scenario)"/>
+    <param name="dt"       value="0.05"/>
+  </node>
+
+</launch>

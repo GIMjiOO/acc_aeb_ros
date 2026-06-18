@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!-- [TEMP SIM] Stub pro_can message package for ACC/AEB bench simulation.
+     The real pro_can lives in radar_byqjj_ws — do NOT use this on the vehicle.
+     Remove this package once the real workspace is merged. -->
+<package format="2">
+  <name>pro_can</name>
+  <version>0.0.1</version>
+  <description>[TEMP SIM] Minimal pro_can message stubs for ACC/AEB bench testing.</description>
+  <maintainer email="gim2548@gmail.com">NPUST Bus Team</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>message_generation</build_depend>
+  <depend>std_msgs</depend>
+  <exec_depend>message_runtime</exec_depend>
+</package>

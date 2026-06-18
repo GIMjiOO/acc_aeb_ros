@@ -1,0 +1,2 @@
+set(radar_conti_MESSAGE_FILES "msg/ClusterGeneral.msg;msg/ClusterQuality.msg;msg/ClusterStatus.msg;msg/CollisonObj.msg;msg/CollisonList.msg;msg/ObjectGeneral.msg;msg/ObjectExtended.msg;msg/ObjectQuality.msg;msg/ObjectStatus.msg;msg/RadarConfiguration.msg;msg/RadarState.msg;msg/VersionID.msg;msg/Frame.msg;msg/Cluster.msg;msg/Object.msg;msg/ClusterList.msg;msg/ObjectList.msg;msg/FilterStateCfg.msg;msg/FilterCfg.msg;msg/FilterStateHeader.msg")
+set(radar_conti_SERVICE_FILES "")

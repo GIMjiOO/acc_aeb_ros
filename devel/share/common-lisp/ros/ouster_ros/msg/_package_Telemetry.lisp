@@ -1,0 +1,12 @@
+(cl:in-package ouster_ros-msg)
+(cl:export '(HEADER-VAL
+          HEADER
+          COUNTDOWN_THERMAL_SHUTDOWN-VAL
+          COUNTDOWN_THERMAL_SHUTDOWN
+          COUNTDOWN_SHOT_LIMITING-VAL
+          COUNTDOWN_SHOT_LIMITING
+          THERMAL_SHUTDOWN-VAL
+          THERMAL_SHUTDOWN
+          SHOT_LIMITING-VAL
+          SHOT_LIMITING
+))

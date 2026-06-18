@@ -1,0 +1,8 @@
+prefix=/home/nvidia/catkin_ws00/install
+
+Name: radar_conti
+Description: Description of radar_conti
+Version: 0.0.0
+Cflags: -I${prefix}/include
+Libs: -L${prefix}/lib -lradar_conti
+Requires: roscpp socketcan_interface std_msgs message_runtime

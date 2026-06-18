@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!-- [TEMP SIM] Stub npust_bus_msgs package for ACC/AEB bench simulation.
+     Replace with the real npust_bus_msgs package before vehicle deployment. -->
+<package format="2">
+  <name>npust_bus_msgs</name>
+  <version>0.0.1</version>
+  <description>[TEMP SIM] Minimal npust_bus_msgs stubs for ACC/AEB bench testing.</description>
+  <maintainer email="gim2548@gmail.com">NPUST Bus Team</maintainer>
+  <license>Proprietary</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>message_generation</build_depend>
+  <exec_depend>message_runtime</exec_depend>
+</package>

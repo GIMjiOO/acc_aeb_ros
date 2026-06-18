@@ -1,0 +1,8 @@
+prefix=/home/nvidia/catkin_ws00/install
+
+Name: zed_yolo
+Description: Description of zed_yolo
+Version: 0.0.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

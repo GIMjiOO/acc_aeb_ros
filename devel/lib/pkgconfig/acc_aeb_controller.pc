@@ -1,0 +1,8 @@
+prefix=/home/nvidia/catkin_ws00/devel
+
+Name: acc_aeb_controller
+Description: Description of acc_aeb_controller
+Version: 15.3.0
+Cflags: -I/home/nvidia/catkin_ws00/src/acc_aeb_controller/include
+Libs: -L${prefix}/lib 
+Requires: roscpp std_msgs diagnostic_msgs pro_can npust_bus_msgs
