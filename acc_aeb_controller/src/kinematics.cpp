@@ -64,36 +64,29 @@ MioResult selectMIO(const PerceptionSnapshot& snap, double ego_v, const Params& 
 
     // Apply per-sensor variance defaults when the publisher leaves fields at 0.
     // Zero variance gives the KF infinite sensor confidence — corrupts the blend.
-    auto varOrDefault = [](double v, double def) noexcept { return v > 0.0 ? v : def; };
-
-    // Warn once per 10 s if either sensor is missing variance data.
-    if (src != SensorSource::RADAR_ONLY && !snap.cam_timeout && snap.objects) {
-        for (const auto& obj : snap.objects->objects) {
-            if (obj.x_var <= 0.0 || obj.vx_var <= 0.0) {
-                ROS_WARN_THROTTLE(10.0, "[selectMIO] Camera objects have zero variance — "
-                    "using fallback (x_var=%.2f vx_var=%.2f). Fix camera node.",
-                    consts::CAM_X_VAR_DEFAULT, consts::CAM_VX_VAR_DEFAULT);
-                break;
-            }
-        }
-    }
-    if (src != SensorSource::CAMERA_ONLY && !snap.radar_timeout && snap.radar_objects) {
-        for (const auto& obj : snap.radar_objects->objects) {
-            if (obj.x_var <= 0.0 || obj.vx_var <= 0.0) {
-                ROS_WARN_THROTTLE(10.0, "[selectMIO] Radar objects have zero variance — "
-                    "using fallback (x_var=%.2f vx_var=%.2f). Fix radar node.",
-                    consts::RAD_X_VAR_DEFAULT, consts::RAD_VX_VAR_DEFAULT);
-                break;
-            }
-        }
-    }
+    // Warnings are throttled to 10 s each and fire inline on first zero hit —
+    // no separate pre-scan loop needed.
+    auto camVar = [](double v, double def) noexcept -> double {
+        if (v > 0.0) return v;
+        ROS_WARN_THROTTLE(10.0, "[selectMIO] Camera objects have zero variance — "
+            "using fallback (x_var=%.2f vx_var=%.2f). Fix camera node.",
+            consts::CAM_X_VAR_DEFAULT, consts::CAM_VX_VAR_DEFAULT);
+        return def;
+    };
+    auto radVar = [](double v, double def) noexcept -> double {
+        if (v > 0.0) return v;
+        ROS_WARN_THROTTLE(10.0, "[selectMIO] Radar objects have zero variance — "
+            "using fallback (x_var=%.2f vx_var=%.2f). Fix radar node.",
+            consts::RAD_X_VAR_DEFAULT, consts::RAD_VX_VAR_DEFAULT);
+        return def;
+    };
 
     // Camera objects (primary: better lateral accuracy).
     if (src != SensorSource::RADAR_ONLY && !snap.cam_timeout && snap.objects) {
         for (const auto& obj : snap.objects->objects)
             score(obj.x, obj.y, obj.vx,
-                  varOrDefault(obj.x_var,  consts::CAM_X_VAR_DEFAULT),
-                  varOrDefault(obj.vx_var, consts::CAM_VX_VAR_DEFAULT),
+                  camVar(obj.x_var,  consts::CAM_X_VAR_DEFAULT),
+                  camVar(obj.vx_var, consts::CAM_VX_VAR_DEFAULT),
                   obj.id, p.vx_is_relative);
     }
 
@@ -102,8 +95,8 @@ MioResult selectMIO(const PerceptionSnapshot& snap, double ego_v, const Params& 
         if (!snap.radar_timeout && snap.radar_objects) {
             for (const auto& robj : snap.radar_objects->objects)
                 score(robj.x, robj.y, robj.vx,
-                      varOrDefault(robj.x_var,  consts::RAD_X_VAR_DEFAULT),
-                      varOrDefault(robj.vx_var, consts::RAD_VX_VAR_DEFAULT),
+                      radVar(robj.x_var,  consts::RAD_X_VAR_DEFAULT),
+                      radVar(robj.vx_var, consts::RAD_VX_VAR_DEFAULT),
                       robj.id, p.radar_vx_is_relative);
         }
     } else if (src != SensorSource::CAMERA_ONLY) {
@@ -141,8 +134,8 @@ MioResult selectMIO(const PerceptionSnapshot& snap, double ego_v, const Params& 
                 }
                 if (!covered)
                     score(robj.x, robj.y, robj.vx,
-                          varOrDefault(robj.x_var,  consts::RAD_X_VAR_DEFAULT),
-                          varOrDefault(robj.vx_var, consts::RAD_VX_VAR_DEFAULT),
+                          radVar(robj.x_var,  consts::RAD_X_VAR_DEFAULT),
+                          radVar(robj.vx_var, consts::RAD_VX_VAR_DEFAULT),
                           robj.id, p.radar_vx_is_relative);
             }
         }
@@ -322,7 +315,6 @@ MioResult MioTracker::track(const MioResult& cam, const MioResult& rad,
     MioResult out = toMioResult(ego_v);
     out.threat_score = have_cam ? cam.threat_score : rad.threat_score;
     out.id           = primary_id;
-    prev_rad_id_     = have_rad ? rad.id : prev_rad_id_;
 
     last_valid_ = out;
     return out;
@@ -332,7 +324,6 @@ void MioTracker::reset() noexcept {
     kf_            = KFState{};
     stale_timer_   = 0.0;
     prev_cam_id_   = -1;
-    prev_rad_id_   = -1;
     candidate_id_  = -1;
     confirm_count_ = 0;
     last_valid_    = {};

@@ -62,11 +62,7 @@ acc_aeb::Params makeDefaultParams()
     p.confirm_frames          = CONFIRM_FRAMES;
     p.aeb_confirm_frames      = AEB_CONFIRM_FRAMES;
     p.spinner_threads         = SPINNER_THREADS;
-    p.filter_alpha_pos        = FILTER_ALPHA_POS;
-    p.filter_alpha_vel        = FILTER_ALPHA_VEL;
-    p.filter_beta_pos         = FILTER_BETA_POS;
-    p.filter_gamma_pos        = FILTER_GAMMA_POS;
-    p.filter_beta_vel         = FILTER_BETA_VEL;
+
     p.mio_weight_dist         = MIO_WEIGHT_DIST;
     p.mio_weight_ttc          = MIO_WEIGHT_TTC;
     p.mass_kg                 = VEHICLE_MASS_KG;

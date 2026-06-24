@@ -123,7 +123,7 @@ inline void kfUpdate(KFState& s, double x_meas, double vx_meas,
     s.P[4] = dot3(tmp10,tmp11,tmp12, IKH20,IKH21,1) + K10*K20*x_var + K11*K21*vx_var;
     s.P[5] = dot3(tmp20,tmp21,tmp22, IKH20,IKH21,1) + K20*K20*x_var + K21*K21*vx_var;
 
-    s.a = clampVal(s.a, -consts::ABG_A_REL_CLAMP_MPS2, consts::ABG_A_REL_CLAMP_MPS2);
+    s.a = clampVal(s.a, -consts::KF_A_REL_CLAMP_MPS2, consts::KF_A_REL_CLAMP_MPS2);
     s.P[0] = std::max(s.P[0], 1e-6);
     s.P[3] = std::max(s.P[3], 1e-6);
     s.P[5] = std::max(s.P[5], 1e-6);

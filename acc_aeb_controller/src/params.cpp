@@ -55,11 +55,7 @@ Params loadParams(ros::NodeHandle& nh) {
     p.confirm_frames          = gi("confirm_frames",       CONFIRM_FRAMES);
     p.aeb_confirm_frames      = gi("aeb_confirm_frames",   AEB_CONFIRM_FRAMES);
     p.spinner_threads         = gi("spinner_threads",      SPINNER_THREADS);
-    p.filter_alpha_pos        = g("filter_alpha_pos",      FILTER_ALPHA_POS);
-    p.filter_alpha_vel        = g("filter_alpha_vel",      FILTER_ALPHA_VEL);
-    p.filter_beta_pos         = g("filter_beta_pos",       FILTER_BETA_POS);
-    p.filter_gamma_pos        = g("filter_gamma_pos",      FILTER_GAMMA_POS);
-    p.filter_beta_vel         = g("filter_beta_vel",       FILTER_BETA_VEL);
+
     p.mio_weight_dist         = g("mio_weight_dist",       MIO_WEIGHT_DIST);
     p.mio_weight_ttc          = g("mio_weight_ttc",        MIO_WEIGHT_TTC);
     p.mass_kg                 = g("mass_kg",               VEHICLE_MASS_KG);
@@ -111,8 +107,8 @@ void validateParams(const Params& p) {
         if (!condition) { ROS_FATAL("[ACC/AEB] PARAM ERROR: %s", msg); ok = false; }
     };
 
-    // dt_s must be strictly positive: the loop period feeds the reciprocal-based
-    // ABG filter (1/dt), so a non-positive value would poison every estimate.
+    // dt_s must be strictly positive: the KF predict uses dt, dt², dt³… so a
+    // non-positive value would produce nonsense covariance growth.
     requireCond(p.dt_s > 0.0, "dt_s must be strictly positive");
 
     requireCond(p.a_aeb_max     < 0.0, "a_aeb_max must be strictly negative");
@@ -167,11 +163,6 @@ void validateParams(const Params& p) {
     requireCond(p.follow_exit_ratio > p.follow_enter_ratio,
                 "follow_exit_ratio must be > follow_enter_ratio");
 
-    requireCond(p.filter_alpha_pos >= 0.0 && p.filter_alpha_pos <= 1.0, "filter_alpha_pos must be in [0, 1]");
-    requireCond(p.filter_alpha_vel >= 0.0 && p.filter_alpha_vel <= 1.0, "filter_alpha_vel must be in [0, 1]");
-    requireCond(p.filter_beta_pos  >= 0.0 && p.filter_beta_pos  <= 1.0, "filter_beta_pos must be in [0, 1]");
-    requireCond(p.filter_gamma_pos >= 0.0 && p.filter_gamma_pos <= 1.0, "filter_gamma_pos must be in [0, 1]");
-    requireCond(p.filter_beta_vel  >= 0.0 && p.filter_beta_vel  <= 1.0, "filter_beta_vel must be in [0, 1]");
 
     requireCond(p.mass_kg    > 0.0, "mass_kg must be strictly positive");
     requireCond(p.wheel_r_m  > 0.0, "wheel_r_m must be strictly positive");

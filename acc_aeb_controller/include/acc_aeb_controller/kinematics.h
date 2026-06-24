@@ -6,7 +6,7 @@
 //    PerceptionSnapshot  (immutable per-cycle view of the perception buffers)
 //    isLaneValid()       (lane-polynomial sanity gate)
 //    selectMIO()         (Most-Important-Object association, pure)
-//    MioTracker          (stateful Alpha-Beta-Gamma filter + grace coasting)
+//    MioTracker          (stateful multi-sensor Kalman filter + grace coasting)
 //    computeKinematics() (TTC + desired gap, pure)
 //
 //  No roscpp here — only the perception message types — so this layer stays
@@ -80,7 +80,6 @@ private:
     KFState   kf_{};
     double    stale_timer_   = 0.0;
     int32_t   prev_cam_id_   = -1;
-    int32_t   prev_rad_id_   = -1;
     int32_t   candidate_id_  = -1;
     int       confirm_count_ = 0;
     MioResult last_valid_{};   // kept for grace propagation

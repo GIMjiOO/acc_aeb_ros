@@ -20,7 +20,7 @@ constexpr double INF_D      = std::numeric_limits<double>::max();
 
 // --- Fixed algorithm constants (not ROS-tunable) -----------------------------
 namespace consts {
-    constexpr double ABG_A_REL_CLAMP_MPS2  = 15.0;   // |a_rel| ceiling for the ABG filter
+    constexpr double KF_A_REL_CLAMP_MPS2   = 15.0;   // |a_rel| ceiling after KF update
     constexpr double GRACE_A_CLOSING_CLAMP =  2.0;   // |a| ceiling during dead-reckon coast
     constexpr double KIN_MIN_A_REL_MPS2    =  0.1;   // below this, skip the quadratic TTC path
     constexpr double MIO_SCORE_EPS         =  0.1;   // denominator floor in the threat score
@@ -78,11 +78,7 @@ namespace defaults {
     constexpr int    CONFIRM_FRAMES       = 3;
     constexpr int    AEB_CONFIRM_FRAMES   = 2;
 
-    constexpr double FILTER_ALPHA_POS     = 0.80;
-    constexpr double FILTER_ALPHA_VEL     = 0.40;
-    constexpr double FILTER_BETA_POS      = 0.20;
-    constexpr double FILTER_GAMMA_POS     = 0.05;
-    constexpr double FILTER_BETA_VEL      = 0.10;
+
 
     constexpr double Q_X = 0.5;    // process noise scalar (m²/s⁵)
     constexpr double Q_V = 0.15;   // process noise scalar for velocity (m²/s³)
@@ -175,7 +171,7 @@ struct Params {
     double sensor_timeout_s, vcu_timeout_s, fault_recovery_s;
     double aeb_hold_s, stop_speed_mps, resume_dist_m;
     double loss_hold_decel;
-    double filter_alpha_pos, filter_alpha_vel, filter_beta_pos, filter_gamma_pos, filter_beta_vel;
+
     double mio_weight_dist, mio_weight_ttc;
     double mass_kg, wheel_r_m, gear_ratio, drv_eff, torque_max, brake_g_max;
     double kp_follow_dist, kd_follow_vrel, ki_follow, kf_follow_arel, follow_iclamp;
