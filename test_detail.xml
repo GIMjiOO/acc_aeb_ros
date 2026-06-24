@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="19" failures="0" disabled="0" errors="0" time="0.001" timestamp="2026-06-24T16:48:04" name="AllTests">
+  <testsuite name="SelectMio" tests="5" failures="0" disabled="0" errors="0" time="0.001" timestamp="2026-06-24T16:48:04">
+    <testcase name="BothTimeoutReturnsInvalid" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="SelectMio" />
+    <testcase name="CameraObjectInLane" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="SelectMio" />
+    <testcase name="ObjectOutsideLaneIsIgnored" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="SelectMio" />
+    <testcase name="RadarFillsCameraStaleGap" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="SelectMio" />
+    <testcase name="DedupSkipsSubThresholdCameraReturn" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="SelectMio" />
+  </testsuite>
+  <testsuite name="MioTracker" tests="2" failures="0" disabled="0" errors="0" time="0" timestamp="2026-06-24T16:48:04">
+    <testcase name="GraceVabsConsistentWithVrel" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="MioTracker" />
+    <testcase name="GraceVabsReflectsCurrentEgoV" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="MioTracker" />
+  </testsuite>
+  <testsuite name="StateMachine" tests="3" failures="0" disabled="0" errors="0" time="0" timestamp="2026-06-24T16:48:04">
+    <testcase name="FaultReachesFullBrakeAtWarnJerkRate" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="StateMachine" />
+    <testcase name="WarnAndFaultUseIdenticalJerkRate" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="StateMachine" />
+    <testcase name="AebCommandIsImmediate" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="StateMachine" />
+  </testsuite>
+  <testsuite name="Kinematics" tests="1" failures="0" disabled="0" errors="0" time="0" timestamp="2026-06-24T16:48:04">
+    <testcase name="BackstopForNearStationaryTarget" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="Kinematics" />
+  </testsuite>
+  <testsuite name="Efficiency" tests="1" failures="0" disabled="0" errors="0" time="0" timestamp="2026-06-24T16:48:04">
+    <testcase name="FullPipelineTimeBudget" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="Efficiency" />
+  </testsuite>
+  <testsuite name="KalmanTest" tests="4" failures="0" disabled="0" errors="0" time="0" timestamp="2026-06-24T16:48:04">
+    <testcase name="PredictClosing" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="KalmanTest" />
+    <testcase name="UpdatePullsTowardMeasurement" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="KalmanTest" />
+    <testcase name="RadarOnlyConverges" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="KalmanTest" />
+    <testcase name="CovariancePositive" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="KalmanTest" />
+  </testsuite>
+  <testsuite name="FusionGate" tests="3" failures="0" disabled="0" errors="0" time="0" timestamp="2026-06-24T16:48:04">
+    <testcase name="AgreementFusesBothSensors" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="FusionGate" />
+    <testcase name="MismatchSkipsRadar" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="FusionGate" />
+    <testcase name="ZeroVarianceFallbackNoNaN" status="run" result="completed" time="0" timestamp="2026-06-24T16:48:04" classname="FusionGate" />
+  </testsuite>
+</testsuites>

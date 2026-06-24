@@ -9,7 +9,7 @@ import struct
 import npust_bus_msgs.msg
 
 class TrackedObjectArray(genpy.Message):
-  _md5sum = "5d218fbb61fe62df928b50149766925f"
+  _md5sum = "7c58ff4f2d5c2b39b6f051161ab0f85e"
   _type = "npust_bus_msgs/TrackedObjectArray"
   _has_header = False  # flag to mark the presence of a Header object
   _full_text = """# [TEMP SIM] TrackedObjectArray — list of all detected objects for one perception frame.
@@ -17,17 +17,23 @@ TrackedObject[] objects
 
 ================================================================================
 MSG: npust_bus_msgs/TrackedObject
-# [TEMP SIM] TrackedObject — single detected object from the perception stack.
+# TrackedObject — single detected object from the perception stack.
 # Fields used by acc_aeb kinematics.cpp:
-#   x   — longitudinal range ahead (m), must be > min_valid_x_m (0.5 m)
-#   y   — lateral offset (m); positive = left
-#   vx  — world-frame absolute velocity when vx_is_relative=false (m/s)
-#          relative-to-ego velocity when vx_is_relative=true (m/s)
-#   id  — stable tracking ID; consistent across frames for the ABG filter
+#   x      — longitudinal range ahead (m), must be > min_valid_x_m (0.5 m)
+#   y      — lateral offset (m); positive = left
+#   vx     — world-frame absolute velocity when vx_is_relative=false (m/s)
+#             relative-to-ego velocity when vx_is_relative=true (m/s)
+#   id     — stable tracking ID; consistent across frames for the Kalman filter
+#   x_var  — variance of x measurement (m²)
+#   y_var  — variance of y measurement (m²)
+#   vx_var — variance of vx measurement (m²/s²)
 float64 x
 float64 y
 float64 vx
 int32   id
+float64 x_var
+float64 y_var
+float64 vx_var
 """
   __slots__ = ['objects']
   _slot_types = ['npust_bus_msgs/TrackedObject[]']
@@ -70,7 +76,7 @@ int32   id
       buff.write(_struct_I.pack(length))
       for val1 in self.objects:
         _x = val1
-        buff.write(_get_struct_3di().pack(_x.x, _x.y, _x.vx, _x.id))
+        buff.write(_get_struct_3di3d().pack(_x.x, _x.y, _x.vx, _x.id, _x.x_var, _x.y_var, _x.vx_var))
     except struct.error as se: self._check_types(struct.error("%s: '%s' when writing '%s'" % (type(se), str(se), str(locals().get('_x', self)))))
     except TypeError as te: self._check_types(ValueError("%s: '%s' when writing '%s'" % (type(te), str(te), str(locals().get('_x', self)))))
 
@@ -93,8 +99,8 @@ int32   id
         val1 = npust_bus_msgs.msg.TrackedObject()
         _x = val1
         start = end
-        end += 28
-        (_x.x, _x.y, _x.vx, _x.id,) = _get_struct_3di().unpack(str[start:end])
+        end += 52
+        (_x.x, _x.y, _x.vx, _x.id, _x.x_var, _x.y_var, _x.vx_var,) = _get_struct_3di3d().unpack(str[start:end])
         self.objects.append(val1)
       return self
     except struct.error as e:
@@ -112,7 +118,7 @@ int32   id
       buff.write(_struct_I.pack(length))
       for val1 in self.objects:
         _x = val1
-        buff.write(_get_struct_3di().pack(_x.x, _x.y, _x.vx, _x.id))
+        buff.write(_get_struct_3di3d().pack(_x.x, _x.y, _x.vx, _x.id, _x.x_var, _x.y_var, _x.vx_var))
     except struct.error as se: self._check_types(struct.error("%s: '%s' when writing '%s'" % (type(se), str(se), str(locals().get('_x', self)))))
     except TypeError as te: self._check_types(ValueError("%s: '%s' when writing '%s'" % (type(te), str(te), str(locals().get('_x', self)))))
 
@@ -136,8 +142,8 @@ int32   id
         val1 = npust_bus_msgs.msg.TrackedObject()
         _x = val1
         start = end
-        end += 28
-        (_x.x, _x.y, _x.vx, _x.id,) = _get_struct_3di().unpack(str[start:end])
+        end += 52
+        (_x.x, _x.y, _x.vx, _x.id, _x.x_var, _x.y_var, _x.vx_var,) = _get_struct_3di3d().unpack(str[start:end])
         self.objects.append(val1)
       return self
     except struct.error as e:
@@ -147,9 +153,9 @@ _struct_I = genpy.struct_I
 def _get_struct_I():
     global _struct_I
     return _struct_I
-_struct_3di = None
-def _get_struct_3di():
-    global _struct_3di
-    if _struct_3di is None:
-        _struct_3di = struct.Struct("<3di")
-    return _struct_3di
+_struct_3di3d = None
+def _get_struct_3di3d():
+    global _struct_3di3d
+    if _struct_3di3d is None:
+        _struct_3di3d = struct.Struct("<3di3d")
+    return _struct_3di3d

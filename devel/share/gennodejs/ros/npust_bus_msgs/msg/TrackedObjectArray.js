@@ -58,7 +58,7 @@ class TrackedObjectArray {
 
   static getMessageSize(object) {
     let length = 0;
-    length += 28 * object.objects.length;
+    length += 52 * object.objects.length;
     return length + 4;
   }
 
@@ -69,7 +69,7 @@ class TrackedObjectArray {
 
   static md5sum() {
     //Returns md5sum for a message object
-    return '5d218fbb61fe62df928b50149766925f';
+    return '7c58ff4f2d5c2b39b6f051161ab0f85e';
   }
 
   static messageDefinition() {
@@ -80,17 +80,23 @@ class TrackedObjectArray {
     
     ================================================================================
     MSG: npust_bus_msgs/TrackedObject
-    # [TEMP SIM] TrackedObject — single detected object from the perception stack.
+    # TrackedObject — single detected object from the perception stack.
     # Fields used by acc_aeb kinematics.cpp:
-    #   x   — longitudinal range ahead (m), must be > min_valid_x_m (0.5 m)
-    #   y   — lateral offset (m); positive = left
-    #   vx  — world-frame absolute velocity when vx_is_relative=false (m/s)
-    #          relative-to-ego velocity when vx_is_relative=true (m/s)
-    #   id  — stable tracking ID; consistent across frames for the ABG filter
+    #   x      — longitudinal range ahead (m), must be > min_valid_x_m (0.5 m)
+    #   y      — lateral offset (m); positive = left
+    #   vx     — world-frame absolute velocity when vx_is_relative=false (m/s)
+    #             relative-to-ego velocity when vx_is_relative=true (m/s)
+    #   id     — stable tracking ID; consistent across frames for the Kalman filter
+    #   x_var  — variance of x measurement (m²)
+    #   y_var  — variance of y measurement (m²)
+    #   vx_var — variance of vx measurement (m²/s²)
     float64 x
     float64 y
     float64 vx
     int32   id
+    float64 x_var
+    float64 y_var
+    float64 vx_var
     
     `;
   }

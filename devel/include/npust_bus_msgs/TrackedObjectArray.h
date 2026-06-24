@@ -123,12 +123,12 @@ struct MD5Sum< ::npust_bus_msgs::TrackedObjectArray_<ContainerAllocator> >
 {
   static const char* value()
   {
-    return "5d218fbb61fe62df928b50149766925f";
+    return "7c58ff4f2d5c2b39b6f051161ab0f85e";
   }
 
   static const char* value(const ::npust_bus_msgs::TrackedObjectArray_<ContainerAllocator>&) { return value(); }
-  static const uint64_t static_value1 = 0x5d218fbb61fe62dfULL;
-  static const uint64_t static_value2 = 0x928b50149766925fULL;
+  static const uint64_t static_value1 = 0x7c58ff4f2d5c2b39ULL;
+  static const uint64_t static_value2 = 0xb6f051161ab0f85eULL;
 };
 
 template<class ContainerAllocator>
@@ -152,17 +152,23 @@ struct Definition< ::npust_bus_msgs::TrackedObjectArray_<ContainerAllocator> >
 "\n"
 "================================================================================\n"
 "MSG: npust_bus_msgs/TrackedObject\n"
-"# [TEMP SIM] TrackedObject — single detected object from the perception stack.\n"
+"# TrackedObject — single detected object from the perception stack.\n"
 "# Fields used by acc_aeb kinematics.cpp:\n"
-"#   x   — longitudinal range ahead (m), must be > min_valid_x_m (0.5 m)\n"
-"#   y   — lateral offset (m); positive = left\n"
-"#   vx  — world-frame absolute velocity when vx_is_relative=false (m/s)\n"
-"#          relative-to-ego velocity when vx_is_relative=true (m/s)\n"
-"#   id  — stable tracking ID; consistent across frames for the ABG filter\n"
+"#   x      — longitudinal range ahead (m), must be > min_valid_x_m (0.5 m)\n"
+"#   y      — lateral offset (m); positive = left\n"
+"#   vx     — world-frame absolute velocity when vx_is_relative=false (m/s)\n"
+"#             relative-to-ego velocity when vx_is_relative=true (m/s)\n"
+"#   id     — stable tracking ID; consistent across frames for the Kalman filter\n"
+"#   x_var  — variance of x measurement (m²)\n"
+"#   y_var  — variance of y measurement (m²)\n"
+"#   vx_var — variance of vx measurement (m²/s²)\n"
 "float64 x\n"
 "float64 y\n"
 "float64 vx\n"
 "int32   id\n"
+"float64 x_var\n"
+"float64 y_var\n"
+"float64 vx_var\n"
 ;
   }
 

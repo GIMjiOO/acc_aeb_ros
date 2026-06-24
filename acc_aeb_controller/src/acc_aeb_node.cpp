@@ -125,7 +125,7 @@ public:
         ctrl_spinner_ = std::make_unique<ros::AsyncSpinner>(1, &ctrl_queue_);
         ctrl_spinner_->start();
 
-        ROS_INFO("[ACC/AEB] v15.3 ready | %.0f kg | cam_vx=%s rad_vx=%s | coast=%.2f/%.2f s | spinners=%d | wd=%.0f ms | vcu_to=%.0f ms",
+        ROS_INFO("[ACC/AEB] v16.0 ready | %.0f kg | cam_vx=%s rad_vx=%s | coast=%.2f/%.2f s | spinners=%d | wd=%.0f ms | vcu_to=%.0f ms",
                  p_.mass_kg,
                  p_.vx_is_relative       ? "relative" : "world",
                  p_.radar_vx_is_relative ? "relative" : "world",
@@ -401,8 +401,13 @@ private:
         else if (rad_stale && !cam_stale)
             ROS_INFO_THROTTLE(5.0, "[ACC/AEB] Radar stale — running on camera only.");
 
-        const MioResult raw_mio = !obj_stale ? selectMIO(snap, ego_v, p_) : MioResult{};
-        const MioResult mio     = tracker_.track(raw_mio, ego_v, actual_dt);
+        const MioResult cam_raw = (!snap.cam_timeout && snap.objects)
+                                  ? selectMIO(snap, ego_v, p_, SensorSource::CAMERA_ONLY)
+                                  : MioResult{};
+        const MioResult rad_raw = (!snap.radar_timeout && snap.radar_objects)
+                                  ? selectMIO(snap, ego_v, p_, SensorSource::RADAR_ONLY)
+                                  : MioResult{};
+        const MioResult mio     = tracker_.track(cam_raw, rad_raw, ego_v, actual_dt);
         const KinResult kin     = (mio.valid || mio.stale) ? computeKinematics(ego_v, mio, p_) : KinResult{};
 
         // Adjacent-lane cut-in awareness (diagnostics only — not fed to state machine).

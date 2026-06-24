@@ -9,6 +9,7 @@
 #include <boost/make_shared.hpp>
 #include <chrono>
 #include <cmath>
+#include <ros/time.h>
 
 #include "acc_aeb_controller/kinematics.h"
 #include "acc_aeb_controller/state_machine.h"
@@ -103,16 +104,24 @@ acc_aeb::Params makeDefaultParams()
     p.radar_fusion_dedup_m    = RADAR_FUSION_DEDUP_M;
     p.vx_is_relative          = VX_IS_RELATIVE;
     p.radar_vx_is_relative    = RADAR_VX_IS_RELATIVE;
+    p.cam_health_timeout_s    = CAM_HEALTH_TIMEOUT_S;
+    p.cut_in_lateral_factor   = CUT_IN_LATERAL_FACTOR;
+    p.q_x                     = Q_X;
+    p.q_v                     = Q_V;
+    p.q_a                     = Q_A;
+    p.fusion_gate_m           = FUSION_GATE_M;
     return p;
 }
 
 // Build a one-object TrackedObjectArray ConstPtr.
 npust_bus_msgs::TrackedObjectArray::ConstPtr makeObjects(
-    double x, double y, double vx, int32_t id = 1)
+    double x, double y, double vx, int32_t id = 1,
+    double x_var = 1.0, double vx_var = 2.0)
 {
     auto arr = boost::make_shared<npust_bus_msgs::TrackedObjectArray>();
     npust_bus_msgs::TrackedObject obj;
     obj.x = x;  obj.y = y;  obj.vx = vx;  obj.id = id;
+    obj.x_var = x_var;  obj.vx_var = vx_var;
     arr->objects.push_back(obj);
     return arr;
 }
@@ -192,11 +201,13 @@ TEST(SelectMio, DedupSkipsSubThresholdCameraReturn)
     // but the OLD dedup loop would let it shadow a radar return 1.2 m away.
     auto cam_arr = boost::make_shared<npust_bus_msgs::TrackedObjectArray>();
     { npust_bus_msgs::TrackedObject c; c.x=0.3; c.y=0.0; c.vx=-5.0; c.id=1;
+      c.x_var=1.0; c.vx_var=2.0;
       cam_arr->objects.push_back(c); }
 
     // Radar: real obstacle at x=1.5 m (dist to camera return = 1.2 m < dedup 2.0 m).
     auto rad_arr = boost::make_shared<npust_bus_msgs::TrackedObjectArray>();
     { npust_bus_msgs::TrackedObject r; r.x=1.5; r.y=0.0; r.vx=-3.0; r.id=2;
+      r.x_var=0.1; r.vx_var=0.05;
       rad_arr->objects.push_back(r); }
 
     acc_aeb::PerceptionSnapshot snap;
@@ -224,7 +235,7 @@ static acc_aeb::MioResult warmTracker(
     using namespace acc_aeb::defaults;
     acc_aeb::MioResult last;
     for (int i = 0; i < CONFIRM_FRAMES + extra; ++i)
-        last = tr.track(raw, ego_v, dt);
+        last = tr.track(raw, {}, ego_v, dt);
     return last;
 }
 
@@ -244,16 +255,16 @@ TEST(MioTracker, GraceVabsConsistentWithVrel)
     raw0.valid = true; raw0.id = 10; raw0.x = 30.0; raw0.v_rel = -5.0;
     raw0.v_abs = ego_v + raw0.v_rel;
     for (int i = 0; i < acc_aeb::defaults::CONFIRM_FRAMES; ++i)
-        (void)tracker.track(raw0, ego_v, dt);
+        (void)tracker.track(raw0, {}, ego_v, dt);
 
-    // Two ABG frames with changing v_rel → non-zero a_rel estimate.
+    // Two KF frames with changing v_rel → non-zero a_rel estimate.
     acc_aeb::MioResult raw1 = raw0;  raw1.x = 29.75; raw1.v_rel = -4.5;
-    (void)tracker.track(raw1, ego_v, dt);
+    (void)tracker.track(raw1, {}, ego_v, dt);
     acc_aeb::MioResult raw2 = raw1;  raw2.x = 29.55; raw2.v_rel = -4.0;
-    (void)tracker.track(raw2, ego_v, dt);
+    (void)tracker.track(raw2, {}, ego_v, dt);
 
     // Object drops out → grace coast.
-    acc_aeb::MioResult grace = tracker.track({}, ego_v, dt);
+    acc_aeb::MioResult grace = tracker.track({}, {}, ego_v, dt);
 
     ASSERT_TRUE(grace.valid)  << "Grace result should still carry a valid position";
     ASSERT_TRUE(grace.stale)  << "Grace result must be flagged stale";
@@ -281,7 +292,7 @@ TEST(MioTracker, GraceVabsReflectsCurrentEgoV)
     (void)warmTracker(tracker, raw, ego_v_track, dt, /*extra=*/2);
 
     // Grace tick at a different ego speed.
-    acc_aeb::MioResult grace = tracker.track({}, ego_v_grace, dt);
+    acc_aeb::MioResult grace = tracker.track({}, {}, ego_v_grace, dt);
 
     ASSERT_TRUE(grace.valid && grace.stale);
     EXPECT_NEAR(grace.v_abs, ego_v_grace + grace.v_rel, 1e-9)
@@ -414,13 +425,13 @@ TEST(Efficiency, FullPipelineTimeBudget)
     // Warm up tracker past the confirm gate before timing.
     acc_aeb::MioResult warm;
     warm.valid = true; warm.id = 1; warm.x = 30.0; warm.v_rel = -5.0; warm.v_abs = 15.0;
-    for (int i = 0; i < 5; ++i) (void)tracker.track(warm, ego_v, dt);
+    for (int i = 0; i < 5; ++i) (void)tracker.track(warm, {}, ego_v, dt);
 
     const int N = 2000;
     auto t0 = std::chrono::steady_clock::now();
     for (int i = 0; i < N; ++i) {
         auto raw  = acc_aeb::selectMIO(snap, ego_v, p);
-        auto mio  = tracker.track(raw, ego_v, dt);
+        auto mio  = tracker.track(raw, {}, ego_v, dt);
         auto kin  = acc_aeb::computeKinematics(ego_v, mio, p);
         auto ctrl = sm.step(mio, kin, ego_v, dt, true, p.target_speed_mps);
         (void)ctrl;
@@ -439,4 +450,146 @@ TEST(Efficiency, FullPipelineTimeBudget)
     EXPECT_LT(avg_us, 5000.0)
         << "Average control-loop iteration time exceeds 5 ms "
            "(50 ms budget at 20 Hz, should be << 1 ms in practice)";
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Kalman filter unit tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+TEST(KalmanTest, PredictClosing)
+{
+    acc_aeb::KFState s;
+    acc_aeb::kfInit(s, 30.0, -5.0, 1.0, 0.1);
+    acc_aeb::kfPredict(s, 0.05, 0.5, 0.15, 0.05);
+    EXPECT_NEAR(s.x, 30.0 - 5.0*0.05, 0.01);   // 29.75 m
+}
+
+TEST(KalmanTest, UpdatePullsTowardMeasurement)
+{
+    acc_aeb::KFState s;
+    acc_aeb::kfInit(s, 30.0, -5.0, 1.0, 0.1);
+    acc_aeb::kfUpdate(s, 28.0, -5.0, 0.1, 0.05);   // radar says 28 m
+    EXPECT_LT(s.x, 30.0);   // state pulled toward radar
+    EXPECT_GT(s.x, 28.0);   // but not all the way (prior had weight)
+}
+
+TEST(KalmanTest, RadarOnlyConverges)
+{
+    acc_aeb::KFState s;
+    acc_aeb::kfInit(s, 30.0, -5.0, 1.0, 0.1);
+    for (int i = 0; i < 20; ++i) {
+        acc_aeb::kfPredict(s, 0.05, 0.5, 0.15, 0.05);
+        acc_aeb::kfUpdate(s, 28.0 - 5.0*0.05*i, -5.0, 0.1, 0.05);
+    }
+    EXPECT_NEAR(s.v, -5.0, 0.3);
+}
+
+TEST(KalmanTest, CovariancePositive)
+{
+    acc_aeb::KFState s;
+    acc_aeb::kfInit(s, 30.0, -5.0, 1.0, 0.1);
+    for (int i = 0; i < 100; ++i) {
+        acc_aeb::kfPredict(s, 0.05, 0.5, 0.15, 0.05);
+        acc_aeb::kfUpdate(s, 25.0, -5.0, 0.1, 0.05);
+        acc_aeb::kfUpdate(s, 25.1, -4.9, 1.0, 2.0);
+    }
+    EXPECT_GT(s.P[0], 0.0);
+    EXPECT_GT(s.P[3], 0.0);
+    EXPECT_GT(s.P[5], 0.0);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  FusionGate tests  —  verify cam/rad mismatch detection in MioTracker::track()
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Helper: warm tracker to confirmed state using camera only.
+static acc_aeb::MioResult warmTrackerFull(acc_aeb::MioTracker& tr,
+                                          double cam_x, double rad_x,
+                                          double ego_v = 0.0, double dt = 0.05)
+{
+    acc_aeb::MioResult cam, rad;
+    cam.x = cam_x; cam.v_abs = ego_v - 2.0; cam.v_rel = -2.0;
+    cam.x_var = 1.0; cam.vx_var = 2.0; cam.id = 1; cam.valid = true;
+    rad.x = rad_x; rad.v_abs = ego_v - 2.0; rad.v_rel = -2.0;
+    rad.x_var = 0.1; rad.vx_var = 0.05; rad.id = 1; rad.valid = true;
+    acc_aeb::MioResult out;
+    for (int i = 0; i < 5; ++i) out = tr.track(cam, rad, ego_v, dt);
+    return out;
+}
+
+TEST(FusionGate, AgreementFusesBothSensors)
+{
+    auto p = makeDefaultParams();
+    p.fusion_gate_m = 3.0;
+    acc_aeb::MioTracker tr(p);
+
+    // Camera and radar both report ~20 m — well within gate.
+    auto out = warmTrackerFull(tr, 20.0, 20.2);
+    EXPECT_TRUE(out.valid);
+    // KF estimate should sit between the two measurements (radar pulls it slightly).
+    EXPECT_NEAR(out.x, 20.0, 1.0);
+}
+
+TEST(FusionGate, MismatchSkipsRadar)
+{
+    auto p = makeDefaultParams();
+    p.fusion_gate_m = 3.0;
+    acc_aeb::MioTracker tr(p);
+
+    // Camera at 20 m, radar at 8 m — mismatch of 12 m >> gate of 3 m.
+    // Tracker should still track (camera provides valid data) but KF must
+    // NOT be pulled toward the radar's 8 m value.
+    auto out = warmTrackerFull(tr, 20.0, 8.0);
+    EXPECT_TRUE(out.valid);
+    // Without fusion gate this would be pulled toward 8 m; with it, stays near 20 m.
+    EXPECT_GT(out.x, 12.0);
+}
+
+TEST(FusionGate, RadarOnlyAlwaysUpdates)
+{
+    // When there is no camera, the fusion gate must not block the radar update
+    // regardless of the radar range value.  The gate condition is:
+    //   !have_cam  →  agree = true  →  always fuse
+    auto p = makeDefaultParams();
+    p.fusion_gate_m = 3.0;
+    acc_aeb::MioTracker tr(p);
+
+    acc_aeb::MioResult rad;
+    rad.x = 50.0; rad.v_rel = -5.0; rad.v_abs = 8.0;
+    rad.x_var = 0.1; rad.vx_var = 0.05; rad.id = 3; rad.valid = true;
+
+    acc_aeb::MioResult out;
+    for (int i = 0; i < 5; ++i) out = tr.track({}, rad, 13.0, 0.05);
+
+    EXPECT_TRUE(out.valid);
+    EXPECT_NEAR(out.x, 50.0, 2.0);   // KF should converge near radar range
+}
+
+TEST(FusionGate, ZeroVarianceFallbackNoNaN)
+{
+    // Sensors publishing x_var=0 / vx_var=0 must not produce NaN in KF output.
+    auto p = makeDefaultParams();
+    acc_aeb::MioTracker tr(p);
+
+    acc_aeb::MioResult cam, rad;
+    cam.x = 25.0; cam.v_rel = -3.0; cam.v_abs = 10.0;
+    cam.x_var = 0.0; cam.vx_var = 0.0;  // publisher didn't fill these
+    cam.id = 1; cam.valid = true;
+    rad.x = 25.2; rad.v_rel = -3.0; rad.v_abs = 10.0;
+    rad.x_var = 0.0; rad.vx_var = 0.0;
+    rad.id = 1; rad.valid = true;
+
+    acc_aeb::MioResult out;
+    for (int i = 0; i < 5; ++i) out = tr.track(cam, rad, 13.0, 0.05);
+
+    EXPECT_TRUE(out.valid);
+    EXPECT_TRUE(std::isfinite(out.x));
+    EXPECT_TRUE(std::isfinite(out.v_rel));
+}
+
+int main(int argc, char** argv)
+{
+    ros::Time::init();   // required for ROS_WARN_THROTTLE used in kinematics.cpp
+    ::testing::InitGoogleTest(&argc, argv);
+    return RUN_ALL_TESTS();
 }

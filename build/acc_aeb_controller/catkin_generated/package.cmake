@@ -1,5 +1,5 @@
 set(_CATKIN_CURRENT_PACKAGE "acc_aeb_controller")
-set(acc_aeb_controller_VERSION "15.3.0")
+set(acc_aeb_controller_VERSION "16.0.0")
 set(acc_aeb_controller_MAINTAINER "NPUST Bus Team <gim2548@gmail.com>")
 set(acc_aeb_controller_PACKAGE_FORMAT "2")
 set(acc_aeb_controller_BUILD_DEPENDS "roscpp" "std_msgs" "diagnostic_msgs" "pro_can" "npust_bus_msgs")

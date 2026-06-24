@@ -40,8 +40,12 @@ struct PerceptionSnapshot {
 
 [[nodiscard]] bool isLaneValid(const npust_bus_msgs::LanePolynomial& msg, const Params& p);
 
+enum class SensorSource { CAMERA_ONLY, RADAR_ONLY, ALL };
+
 // Pure association: pick the highest-threat in-lane object. No internal state.
-[[nodiscard]] MioResult selectMIO(const PerceptionSnapshot& snap, double ego_v, const Params& p);
+// src controls which sensor(s) to consider; defaults to ALL (original behaviour).
+[[nodiscard]] MioResult selectMIO(const PerceptionSnapshot& snap, double ego_v, const Params& p,
+                                  SensorSource src = SensorSource::ALL);
 
 // Pick the highest-threat object in the ADJACENT zone (outside ego lane but
 // within cut_in_lateral_factor × dynamic_half_w). Used for cut-in awareness
@@ -53,30 +57,33 @@ struct PerceptionSnapshot {
 [[nodiscard]] KinResult computeKinematics(double ego_v, const MioResult& mio, const Params& p);
 
 //------------------------------------------------------------------------------
-//  Stateful Alpha-Beta-Gamma tracker with confirm/grace logic.
+//  Stateful multi-sensor Kalman tracker with confirm/grace logic.
 //------------------------------------------------------------------------------
 class MioTracker {
 public:
     explicit MioTracker(const Params& p) : p_(p) {}
 
-    // Fuses a freshly-associated raw MIO with the filter history. Returns the
-    // smoothed MIO, a dead-reckoned "grace" MIO during brief dropouts, or an
-    // invalid MIO once the target is truly lost. `dt` must be > 0.
-    [[nodiscard]] MioResult track(const MioResult& raw, double ego_v, double dt);
+    // Two-step multi-sensor Kalman update. Call with camera MIO first, then
+    // radar MIO (both may be invalid). Returns the fused smoothed MIO, a
+    // KF-predicted "grace" MIO during brief dropouts, or invalid once lost.
+    [[nodiscard]] MioResult track(const MioResult& camera_raw,
+                                  const MioResult& radar_raw,
+                                  double ego_v, double dt);
 
     void reset() noexcept;
 
 private:
-    // Dead-reckons last_valid_mio_ forward by `dt` and returns it flagged stale.
-    // `ego_v` is needed to keep v_abs consistent with the propagated v_rel.
+    [[nodiscard]] MioResult toMioResult(double ego_v) const;
     [[nodiscard]] MioResult propagateGrace(double dt, double ego_v);
 
     const Params& p_;
-    MioResult last_valid_mio_{};
+    KFState   kf_{};
     double    stale_timer_   = 0.0;
-    int32_t   prev_mio_id_   = -1;
+    int32_t   prev_cam_id_   = -1;
+    int32_t   prev_rad_id_   = -1;
     int32_t   candidate_id_  = -1;
     int       confirm_count_ = 0;
+    MioResult last_valid_{};   // kept for grace propagation
 };
 
 } // namespace acc_aeb

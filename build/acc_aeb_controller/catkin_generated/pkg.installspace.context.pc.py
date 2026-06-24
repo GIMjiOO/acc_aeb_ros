@@ -5,4 +5,4 @@ PROJECT_CATKIN_DEPENDS = "roscpp;std_msgs;diagnostic_msgs;pro_can;npust_bus_msgs
 PKG_CONFIG_LIBRARIES_WITH_PREFIX = "".split(';') if "" != "" else []
 PROJECT_NAME = "acc_aeb_controller"
 PROJECT_SPACE_DIR = "/home/nvidia/catkin_ws00/install"
-PROJECT_VERSION = "15.3.0"
+PROJECT_VERSION = "16.0.0"

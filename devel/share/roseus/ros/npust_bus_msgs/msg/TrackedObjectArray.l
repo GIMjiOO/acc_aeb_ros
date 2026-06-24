@@ -61,7 +61,7 @@
    self)
   )
 
-(setf (get npust_bus_msgs::TrackedObjectArray :md5sum-) "5d218fbb61fe62df928b50149766925f")
+(setf (get npust_bus_msgs::TrackedObjectArray :md5sum-) "7c58ff4f2d5c2b39b6f051161ab0f85e")
 (setf (get npust_bus_msgs::TrackedObjectArray :datatype-) "npust_bus_msgs/TrackedObjectArray")
 (setf (get npust_bus_msgs::TrackedObjectArray :definition-)
       "# [TEMP SIM] TrackedObjectArray — list of all detected objects for one perception frame.
@@ -69,22 +69,28 @@ TrackedObject[] objects
 
 ================================================================================
 MSG: npust_bus_msgs/TrackedObject
-# [TEMP SIM] TrackedObject — single detected object from the perception stack.
+# TrackedObject — single detected object from the perception stack.
 # Fields used by acc_aeb kinematics.cpp:
-#   x   — longitudinal range ahead (m), must be > min_valid_x_m (0.5 m)
-#   y   — lateral offset (m); positive = left
-#   vx  — world-frame absolute velocity when vx_is_relative=false (m/s)
-#          relative-to-ego velocity when vx_is_relative=true (m/s)
-#   id  — stable tracking ID; consistent across frames for the ABG filter
+#   x      — longitudinal range ahead (m), must be > min_valid_x_m (0.5 m)
+#   y      — lateral offset (m); positive = left
+#   vx     — world-frame absolute velocity when vx_is_relative=false (m/s)
+#             relative-to-ego velocity when vx_is_relative=true (m/s)
+#   id     — stable tracking ID; consistent across frames for the Kalman filter
+#   x_var  — variance of x measurement (m²)
+#   y_var  — variance of y measurement (m²)
+#   vx_var — variance of vx measurement (m²/s²)
 float64 x
 float64 y
 float64 vx
 int32   id
+float64 x_var
+float64 y_var
+float64 vx_var
 
 ")
 
 
 
-(provide :npust_bus_msgs/TrackedObjectArray "5d218fbb61fe62df928b50149766925f")
+(provide :npust_bus_msgs/TrackedObjectArray "7c58ff4f2d5c2b39b6f051161ab0f85e")
 
 

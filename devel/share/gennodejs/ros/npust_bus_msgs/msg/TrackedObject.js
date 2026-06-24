@@ -22,6 +22,9 @@ class TrackedObject {
       this.y = null;
       this.vx = null;
       this.id = null;
+      this.x_var = null;
+      this.y_var = null;
+      this.vx_var = null;
     }
     else {
       if (initObj.hasOwnProperty('x')) {
@@ -48,6 +51,24 @@ class TrackedObject {
       else {
         this.id = 0;
       }
+      if (initObj.hasOwnProperty('x_var')) {
+        this.x_var = initObj.x_var
+      }
+      else {
+        this.x_var = 0.0;
+      }
+      if (initObj.hasOwnProperty('y_var')) {
+        this.y_var = initObj.y_var
+      }
+      else {
+        this.y_var = 0.0;
+      }
+      if (initObj.hasOwnProperty('vx_var')) {
+        this.vx_var = initObj.vx_var
+      }
+      else {
+        this.vx_var = 0.0;
+      }
     }
   }
 
@@ -61,6 +82,12 @@ class TrackedObject {
     bufferOffset = _serializer.float64(obj.vx, buffer, bufferOffset);
     // Serialize message field [id]
     bufferOffset = _serializer.int32(obj.id, buffer, bufferOffset);
+    // Serialize message field [x_var]
+    bufferOffset = _serializer.float64(obj.x_var, buffer, bufferOffset);
+    // Serialize message field [y_var]
+    bufferOffset = _serializer.float64(obj.y_var, buffer, bufferOffset);
+    // Serialize message field [vx_var]
+    bufferOffset = _serializer.float64(obj.vx_var, buffer, bufferOffset);
     return bufferOffset;
   }
 
@@ -76,11 +103,17 @@ class TrackedObject {
     data.vx = _deserializer.float64(buffer, bufferOffset);
     // Deserialize message field [id]
     data.id = _deserializer.int32(buffer, bufferOffset);
+    // Deserialize message field [x_var]
+    data.x_var = _deserializer.float64(buffer, bufferOffset);
+    // Deserialize message field [y_var]
+    data.y_var = _deserializer.float64(buffer, bufferOffset);
+    // Deserialize message field [vx_var]
+    data.vx_var = _deserializer.float64(buffer, bufferOffset);
     return data;
   }
 
   static getMessageSize(object) {
-    return 28;
+    return 52;
   }
 
   static datatype() {
@@ -90,23 +123,29 @@ class TrackedObject {
 
   static md5sum() {
     //Returns md5sum for a message object
-    return 'cb6bc2fd770dd453884b992e000b9106';
+    return '331682f7f129bb4bca16e4da62c26662';
   }
 
   static messageDefinition() {
     // Returns full string definition for message
     return `
-    # [TEMP SIM] TrackedObject — single detected object from the perception stack.
+    # TrackedObject — single detected object from the perception stack.
     # Fields used by acc_aeb kinematics.cpp:
-    #   x   — longitudinal range ahead (m), must be > min_valid_x_m (0.5 m)
-    #   y   — lateral offset (m); positive = left
-    #   vx  — world-frame absolute velocity when vx_is_relative=false (m/s)
-    #          relative-to-ego velocity when vx_is_relative=true (m/s)
-    #   id  — stable tracking ID; consistent across frames for the ABG filter
+    #   x      — longitudinal range ahead (m), must be > min_valid_x_m (0.5 m)
+    #   y      — lateral offset (m); positive = left
+    #   vx     — world-frame absolute velocity when vx_is_relative=false (m/s)
+    #             relative-to-ego velocity when vx_is_relative=true (m/s)
+    #   id     — stable tracking ID; consistent across frames for the Kalman filter
+    #   x_var  — variance of x measurement (m²)
+    #   y_var  — variance of y measurement (m²)
+    #   vx_var — variance of vx measurement (m²/s²)
     float64 x
     float64 y
     float64 vx
     int32   id
+    float64 x_var
+    float64 y_var
+    float64 vx_var
     
     `;
   }
@@ -143,6 +182,27 @@ class TrackedObject {
     }
     else {
       resolved.id = 0
+    }
+
+    if (msg.x_var !== undefined) {
+      resolved.x_var = msg.x_var;
+    }
+    else {
+      resolved.x_var = 0.0
+    }
+
+    if (msg.y_var !== undefined) {
+      resolved.y_var = msg.y_var;
+    }
+    else {
+      resolved.y_var = 0.0
+    }
+
+    if (msg.vx_var !== undefined) {
+      resolved.vx_var = msg.vx_var;
+    }
+    else {
+      resolved.vx_var = 0.0
     }
 
     return resolved;

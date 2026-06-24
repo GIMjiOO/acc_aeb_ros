@@ -8,23 +8,29 @@ import struct
 
 
 class TrackedObject(genpy.Message):
-  _md5sum = "cb6bc2fd770dd453884b992e000b9106"
+  _md5sum = "331682f7f129bb4bca16e4da62c26662"
   _type = "npust_bus_msgs/TrackedObject"
   _has_header = False  # flag to mark the presence of a Header object
-  _full_text = """# [TEMP SIM] TrackedObject — single detected object from the perception stack.
+  _full_text = """# TrackedObject — single detected object from the perception stack.
 # Fields used by acc_aeb kinematics.cpp:
-#   x   — longitudinal range ahead (m), must be > min_valid_x_m (0.5 m)
-#   y   — lateral offset (m); positive = left
-#   vx  — world-frame absolute velocity when vx_is_relative=false (m/s)
-#          relative-to-ego velocity when vx_is_relative=true (m/s)
-#   id  — stable tracking ID; consistent across frames for the ABG filter
+#   x      — longitudinal range ahead (m), must be > min_valid_x_m (0.5 m)
+#   y      — lateral offset (m); positive = left
+#   vx     — world-frame absolute velocity when vx_is_relative=false (m/s)
+#             relative-to-ego velocity when vx_is_relative=true (m/s)
+#   id     — stable tracking ID; consistent across frames for the Kalman filter
+#   x_var  — variance of x measurement (m²)
+#   y_var  — variance of y measurement (m²)
+#   vx_var — variance of vx measurement (m²/s²)
 float64 x
 float64 y
 float64 vx
 int32   id
+float64 x_var
+float64 y_var
+float64 vx_var
 """
-  __slots__ = ['x','y','vx','id']
-  _slot_types = ['float64','float64','float64','int32']
+  __slots__ = ['x','y','vx','id','x_var','y_var','vx_var']
+  _slot_types = ['float64','float64','float64','int32','float64','float64','float64']
 
   def __init__(self, *args, **kwds):
     """
@@ -34,7 +40,7 @@ int32   id
     changes.  You cannot mix in-order arguments and keyword arguments.
 
     The available fields are:
-       x,y,vx,id
+       x,y,vx,id,x_var,y_var,vx_var
 
     :param args: complete set of field values, in .msg order
     :param kwds: use keyword arguments corresponding to message field names
@@ -51,11 +57,20 @@ int32   id
         self.vx = 0.
       if self.id is None:
         self.id = 0
+      if self.x_var is None:
+        self.x_var = 0.
+      if self.y_var is None:
+        self.y_var = 0.
+      if self.vx_var is None:
+        self.vx_var = 0.
     else:
       self.x = 0.
       self.y = 0.
       self.vx = 0.
       self.id = 0
+      self.x_var = 0.
+      self.y_var = 0.
+      self.vx_var = 0.
 
   def _get_types(self):
     """
@@ -70,7 +85,7 @@ int32   id
     """
     try:
       _x = self
-      buff.write(_get_struct_3di().pack(_x.x, _x.y, _x.vx, _x.id))
+      buff.write(_get_struct_3di3d().pack(_x.x, _x.y, _x.vx, _x.id, _x.x_var, _x.y_var, _x.vx_var))
     except struct.error as se: self._check_types(struct.error("%s: '%s' when writing '%s'" % (type(se), str(se), str(locals().get('_x', self)))))
     except TypeError as te: self._check_types(ValueError("%s: '%s' when writing '%s'" % (type(te), str(te), str(locals().get('_x', self)))))
 
@@ -85,8 +100,8 @@ int32   id
       end = 0
       _x = self
       start = end
-      end += 28
-      (_x.x, _x.y, _x.vx, _x.id,) = _get_struct_3di().unpack(str[start:end])
+      end += 52
+      (_x.x, _x.y, _x.vx, _x.id, _x.x_var, _x.y_var, _x.vx_var,) = _get_struct_3di3d().unpack(str[start:end])
       return self
     except struct.error as e:
       raise genpy.DeserializationError(e)  # most likely buffer underfill
@@ -100,7 +115,7 @@ int32   id
     """
     try:
       _x = self
-      buff.write(_get_struct_3di().pack(_x.x, _x.y, _x.vx, _x.id))
+      buff.write(_get_struct_3di3d().pack(_x.x, _x.y, _x.vx, _x.id, _x.x_var, _x.y_var, _x.vx_var))
     except struct.error as se: self._check_types(struct.error("%s: '%s' when writing '%s'" % (type(se), str(se), str(locals().get('_x', self)))))
     except TypeError as te: self._check_types(ValueError("%s: '%s' when writing '%s'" % (type(te), str(te), str(locals().get('_x', self)))))
 
@@ -116,8 +131,8 @@ int32   id
       end = 0
       _x = self
       start = end
-      end += 28
-      (_x.x, _x.y, _x.vx, _x.id,) = _get_struct_3di().unpack(str[start:end])
+      end += 52
+      (_x.x, _x.y, _x.vx, _x.id, _x.x_var, _x.y_var, _x.vx_var,) = _get_struct_3di3d().unpack(str[start:end])
       return self
     except struct.error as e:
       raise genpy.DeserializationError(e)  # most likely buffer underfill
@@ -126,9 +141,9 @@ _struct_I = genpy.struct_I
 def _get_struct_I():
     global _struct_I
     return _struct_I
-_struct_3di = None
-def _get_struct_3di():
-    global _struct_3di
-    if _struct_3di is None:
-        _struct_3di = struct.Struct("<3di")
-    return _struct_3di
+_struct_3di3d = None
+def _get_struct_3di3d():
+    global _struct_3di3d
+    if _struct_3di3d is None:
+        _struct_3di3d = struct.Struct("<3di3d")
+    return _struct_3di3d

@@ -27,13 +27,19 @@ struct TrackedObject_
     : x(0.0)
     , y(0.0)
     , vx(0.0)
-    , id(0)  {
+    , id(0)
+    , x_var(0.0)
+    , y_var(0.0)
+    , vx_var(0.0)  {
     }
   TrackedObject_(const ContainerAllocator& _alloc)
     : x(0.0)
     , y(0.0)
     , vx(0.0)
-    , id(0)  {
+    , id(0)
+    , x_var(0.0)
+    , y_var(0.0)
+    , vx_var(0.0)  {
   (void)_alloc;
     }
 
@@ -50,6 +56,15 @@ struct TrackedObject_
 
    typedef int32_t _id_type;
   _id_type id;
+
+   typedef double _x_var_type;
+  _x_var_type x_var;
+
+   typedef double _y_var_type;
+  _y_var_type y_var;
+
+   typedef double _vx_var_type;
+  _vx_var_type vx_var;
 
 
 
@@ -83,7 +98,10 @@ bool operator==(const ::npust_bus_msgs::TrackedObject_<ContainerAllocator1> & lh
   return lhs.x == rhs.x &&
     lhs.y == rhs.y &&
     lhs.vx == rhs.vx &&
-    lhs.id == rhs.id;
+    lhs.id == rhs.id &&
+    lhs.x_var == rhs.x_var &&
+    lhs.y_var == rhs.y_var &&
+    lhs.vx_var == rhs.vx_var;
 }
 
 template<typename ContainerAllocator1, typename ContainerAllocator2>
@@ -140,12 +158,12 @@ struct MD5Sum< ::npust_bus_msgs::TrackedObject_<ContainerAllocator> >
 {
   static const char* value()
   {
-    return "cb6bc2fd770dd453884b992e000b9106";
+    return "331682f7f129bb4bca16e4da62c26662";
   }
 
   static const char* value(const ::npust_bus_msgs::TrackedObject_<ContainerAllocator>&) { return value(); }
-  static const uint64_t static_value1 = 0xcb6bc2fd770dd453ULL;
-  static const uint64_t static_value2 = 0x884b992e000b9106ULL;
+  static const uint64_t static_value1 = 0x331682f7f129bb4bULL;
+  static const uint64_t static_value2 = 0xca16e4da62c26662ULL;
 };
 
 template<class ContainerAllocator>
@@ -164,17 +182,23 @@ struct Definition< ::npust_bus_msgs::TrackedObject_<ContainerAllocator> >
 {
   static const char* value()
   {
-    return "# [TEMP SIM] TrackedObject — single detected object from the perception stack.\n"
+    return "# TrackedObject — single detected object from the perception stack.\n"
 "# Fields used by acc_aeb kinematics.cpp:\n"
-"#   x   — longitudinal range ahead (m), must be > min_valid_x_m (0.5 m)\n"
-"#   y   — lateral offset (m); positive = left\n"
-"#   vx  — world-frame absolute velocity when vx_is_relative=false (m/s)\n"
-"#          relative-to-ego velocity when vx_is_relative=true (m/s)\n"
-"#   id  — stable tracking ID; consistent across frames for the ABG filter\n"
+"#   x      — longitudinal range ahead (m), must be > min_valid_x_m (0.5 m)\n"
+"#   y      — lateral offset (m); positive = left\n"
+"#   vx     — world-frame absolute velocity when vx_is_relative=false (m/s)\n"
+"#             relative-to-ego velocity when vx_is_relative=true (m/s)\n"
+"#   id     — stable tracking ID; consistent across frames for the Kalman filter\n"
+"#   x_var  — variance of x measurement (m²)\n"
+"#   y_var  — variance of y measurement (m²)\n"
+"#   vx_var — variance of vx measurement (m²/s²)\n"
 "float64 x\n"
 "float64 y\n"
 "float64 vx\n"
 "int32   id\n"
+"float64 x_var\n"
+"float64 y_var\n"
+"float64 vx_var\n"
 ;
   }
 
@@ -197,6 +221,9 @@ namespace serialization
       stream.next(m.y);
       stream.next(m.vx);
       stream.next(m.id);
+      stream.next(m.x_var);
+      stream.next(m.y_var);
+      stream.next(m.vx_var);
     }
 
     ROS_DECLARE_ALLINONE_SERIALIZER
@@ -231,6 +258,18 @@ struct Printer< ::npust_bus_msgs::TrackedObject_<ContainerAllocator> >
       s << std::endl;
     s << indent << "id: ";
     Printer<int32_t>::stream(s, indent + "  ", v.id);
+    if (true || !indent.empty())
+      s << std::endl;
+    s << indent << "x_var: ";
+    Printer<double>::stream(s, indent + "  ", v.x_var);
+    if (true || !indent.empty())
+      s << std::endl;
+    s << indent << "y_var: ";
+    Printer<double>::stream(s, indent + "  ", v.y_var);
+    if (true || !indent.empty())
+      s << std::endl;
+    s << indent << "vx_var: ";
+    Printer<double>::stream(s, indent + "  ", v.vx_var);
   }
 };
 

@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <package format="2">
   <name>acc_aeb_controller</name>
-  <version>15.3.0</version>
+  <version>16.0.0</version>
   <description>
     Adaptive Cruise Control / Autonomous Emergency Braking for the NPUST heavy
     bus platform. Hard-real-time ROS 1 controller with zero hot-path heap,

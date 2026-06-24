@@ -1,10 +1,11 @@
 //==============================================================================
-//  kinematics.cpp  —  MIO association, ABG tracking, and TTC math.
+//  kinematics.cpp  —  MIO association, Kalman tracking, and TTC math.
 //==============================================================================
 #include "acc_aeb_controller/kinematics.h"
 
 #include <algorithm>
 #include <cmath>
+#include <ros/ros.h>
 
 namespace acc_aeb {
 
@@ -15,12 +16,15 @@ bool isLaneValid(const npust_bus_msgs::LanePolynomial& msg, const Params& p) {
     return true;
 }
 
-MioResult selectMIO(const PerceptionSnapshot& snap, double ego_v, const Params& p) {
+MioResult selectMIO(const PerceptionSnapshot& snap, double ego_v, const Params& p,
+                    SensorSource src) {
     MioResult best;
     double    max_threat = -1.0;
 
     // Score one object; updates best/max_threat if it is the highest threat so far.
-    auto score = [&](double ox, double oy, double ovx, int32_t oid, bool vx_rel) {
+    auto score = [&](double ox, double oy, double ovx,
+                     double ox_var, double ovx_var,
+                     int32_t oid, bool vx_rel) {
         if (ox <= p.min_valid_x_m || ox > p.max_range_m) return;
         if (!std::isfinite(ox) || !std::isfinite(oy) || !std::isfinite(ovx)) return;
 
@@ -53,51 +57,94 @@ MioResult selectMIO(const PerceptionSnapshot& snap, double ego_v, const Params& 
             best.threat_score = threat;
             best.v_rel        = v_rel;
             best.v_abs        = vx_rel ? (ego_v + ovx) : ovx;
+            best.x_var        = ox_var;
+            best.vx_var       = ovx_var;
         }
     };
 
-    // Camera objects (primary: better lateral accuracy).
-    if (!snap.cam_timeout && snap.objects) {
-        for (const auto& obj : snap.objects->objects)
-            score(obj.x, obj.y, obj.vx, obj.id, p.vx_is_relative);
+    // Apply per-sensor variance defaults when the publisher leaves fields at 0.
+    // Zero variance gives the KF infinite sensor confidence — corrupts the blend.
+    auto varOrDefault = [](double v, double def) noexcept { return v > 0.0 ? v : def; };
+
+    // Warn once per 10 s if either sensor is missing variance data.
+    if (src != SensorSource::RADAR_ONLY && !snap.cam_timeout && snap.objects) {
+        for (const auto& obj : snap.objects->objects) {
+            if (obj.x_var <= 0.0 || obj.vx_var <= 0.0) {
+                ROS_WARN_THROTTLE(10.0, "[selectMIO] Camera objects have zero variance — "
+                    "using fallback (x_var=%.2f vx_var=%.2f). Fix camera node.",
+                    consts::CAM_X_VAR_DEFAULT, consts::CAM_VX_VAR_DEFAULT);
+                break;
+            }
+        }
+    }
+    if (src != SensorSource::CAMERA_ONLY && !snap.radar_timeout && snap.radar_objects) {
+        for (const auto& obj : snap.radar_objects->objects) {
+            if (obj.x_var <= 0.0 || obj.vx_var <= 0.0) {
+                ROS_WARN_THROTTLE(10.0, "[selectMIO] Radar objects have zero variance — "
+                    "using fallback (x_var=%.2f vx_var=%.2f). Fix radar node.",
+                    consts::RAD_X_VAR_DEFAULT, consts::RAD_VX_VAR_DEFAULT);
+                break;
+            }
+        }
     }
 
-    // Radar objects: skip any that coincide with a camera object to avoid
-    // double-counting the same physical obstacle (Euclidean dedup in XY).
-    // Only suppress a radar object when the matching camera object is itself in-lane;
-    // an out-of-lane camera false detection must not block a valid radar detection.
-    if (!snap.radar_timeout && snap.radar_objects) {
-        const double dedup2 = p.radar_fusion_dedup_m * p.radar_fusion_dedup_m;
-        for (const auto& robj : snap.radar_objects->objects) {
-            bool covered = false;
-            if (!snap.cam_timeout && snap.objects) {
-                for (const auto& cobj : snap.objects->objects) {
-                    if (cobj.x <= p.min_valid_x_m || cobj.x > p.max_range_m) continue;
-                    if (!std::isfinite(cobj.x) || !std::isfinite(cobj.y)) continue;
+    // Camera objects (primary: better lateral accuracy).
+    if (src != SensorSource::RADAR_ONLY && !snap.cam_timeout && snap.objects) {
+        for (const auto& obj : snap.objects->objects)
+            score(obj.x, obj.y, obj.vx,
+                  varOrDefault(obj.x_var,  consts::CAM_X_VAR_DEFAULT),
+                  varOrDefault(obj.vx_var, consts::CAM_VX_VAR_DEFAULT),
+                  obj.id, p.vx_is_relative);
+    }
 
-                    // Mirror the in-lane check from score() so an out-of-lane camera
-                    // object cannot suppress a valid in-lane radar detection.
-                    bool cam_in_lane = false;
-                    if (snap.lane_l.valid && snap.lane_r.valid) {
-                        const double x2  = cobj.x * cobj.x;
-                        const double y_l = snap.lane_l.a * x2 + snap.lane_l.b * cobj.x + snap.lane_l.c;
-                        const double y_r = snap.lane_r.a * x2 + snap.lane_r.b * cobj.x + snap.lane_r.c;
-                        if (std::abs(y_l - y_r) <= p.max_lane_width_m)
-                            cam_in_lane = (cobj.y <= std::max(y_l, y_r) && cobj.y >= std::min(y_l, y_r));
-                        else
+    if (src == SensorSource::RADAR_ONLY) {
+        // Radar-only: no dedup — camera not used, KF handles the fusion separately.
+        if (!snap.radar_timeout && snap.radar_objects) {
+            for (const auto& robj : snap.radar_objects->objects)
+                score(robj.x, robj.y, robj.vx,
+                      varOrDefault(robj.x_var,  consts::RAD_X_VAR_DEFAULT),
+                      varOrDefault(robj.vx_var, consts::RAD_VX_VAR_DEFAULT),
+                      robj.id, p.radar_vx_is_relative);
+        }
+    } else if (src != SensorSource::CAMERA_ONLY) {
+        // ALL: radar objects with dedup against in-lane camera returns.
+        // Only suppress a radar object when the matching camera object is itself
+        // in-lane — an out-of-lane camera false detection must not block a valid
+        // radar detection.
+        if (!snap.radar_timeout && snap.radar_objects) {
+            const double dedup2 = p.radar_fusion_dedup_m * p.radar_fusion_dedup_m;
+            for (const auto& robj : snap.radar_objects->objects) {
+                bool covered = false;
+                if (!snap.cam_timeout && snap.objects) {
+                    for (const auto& cobj : snap.objects->objects) {
+                        if (cobj.x <= p.min_valid_x_m || cobj.x > p.max_range_m) continue;
+                        if (!std::isfinite(cobj.x) || !std::isfinite(cobj.y)) continue;
+
+                        bool cam_in_lane = false;
+                        if (snap.lane_l.valid && snap.lane_r.valid) {
+                            const double x2  = cobj.x * cobj.x;
+                            const double y_l = snap.lane_l.a * x2 + snap.lane_l.b * cobj.x + snap.lane_l.c;
+                            const double y_r = snap.lane_r.a * x2 + snap.lane_r.b * cobj.x + snap.lane_r.c;
+                            if (std::abs(y_l - y_r) <= p.max_lane_width_m)
+                                cam_in_lane = (cobj.y <= std::max(y_l, y_r) && cobj.y >= std::min(y_l, y_r));
+                            else
+                                cam_in_lane = (std::abs(cobj.y) <= snap.dynamic_half_w);
+                        } else {
                             cam_in_lane = (std::abs(cobj.y) <= snap.dynamic_half_w);
-                    } else {
-                        cam_in_lane = (std::abs(cobj.y) <= snap.dynamic_half_w);
-                    }
-                    if (!cam_in_lane) continue;
+                        }
+                        if (!cam_in_lane) continue;
 
-                    const double dx = robj.x - cobj.x;
-                    const double dy = robj.y - cobj.y;
-                    if (dx * dx + dy * dy < dedup2) { covered = true; break; }
+                        const double dx = robj.x - cobj.x;
+                        const double dy = robj.y - cobj.y;
+                        if (dx * dx + dy * dy < dedup2) { covered = true; break; }
+                    }
                 }
+                if (!covered)
+                    score(robj.x, robj.y, robj.vx,
+                          varOrDefault(robj.x_var,  consts::RAD_X_VAR_DEFAULT),
+                          varOrDefault(robj.vx_var, consts::RAD_VX_VAR_DEFAULT),
+                          robj.id, p.radar_vx_is_relative);
             }
-            if (!covered)
-                score(robj.x, robj.y, robj.vx, robj.id, p.radar_vx_is_relative);
         }
     }
 
@@ -179,110 +226,116 @@ MioResult selectAdjacentMIO(const PerceptionSnapshot& snap, double ego_v, const 
     return best;
 }
 
-MioResult MioTracker::propagateGrace(double dt, double ego_v) {
-    MioResult grace = last_valid_mio_;
-    if (grace.valid) {
-        const double a_closing = clampVal(-grace.a_rel,
-                                          -consts::GRACE_A_CLOSING_CLAMP,
-                                           consts::GRACE_A_CLOSING_CLAMP);
-        const double delta_x = (-grace.v_rel) * dt + 0.5 * a_closing * dt * dt;
-        grace.x      = clampVal(grace.x - delta_x, p_.min_stale_x_m, p_.max_range_m);
-        grace.v_rel += grace.a_rel * dt;
-        grace.v_abs  = ego_v + grace.v_rel;
-        last_valid_mio_.x     = grace.x;
-        last_valid_mio_.v_rel = grace.v_rel;
-        last_valid_mio_.v_abs = grace.v_abs;
-    }
-    grace.stale = true;
-    return grace;
+MioResult MioTracker::toMioResult(double ego_v) const {
+    MioResult r;
+    r.x     = kf_.x;
+    r.v_rel = kf_.v;
+    r.a_rel = kf_.a;
+    r.v_abs = ego_v + kf_.v;
+    r.valid = true;
+    r.stale = false;
+    r.x_var  = kf_.P[0];
+    r.vx_var = kf_.P[3];
+    return r;
 }
 
-MioResult MioTracker::track(const MioResult& raw, double ego_v, double dt) {
-    // -------- no fresh detection: coast on the history, then give up ----------
-    if (!raw.valid) {
-        stale_timer_  += dt;
+MioResult MioTracker::propagateGrace(double dt, double ego_v) {
+    if (!kf_.initialised || !last_valid_.valid) return {};
+    kfPredict(kf_, dt, p_.q_x, p_.q_v, p_.q_a);
+    MioResult g = toMioResult(ego_v);
+    g.stale = true;
+    last_valid_ = g;
+    return g;
+}
+
+MioResult MioTracker::track(const MioResult& cam, const MioResult& rad,
+                             double ego_v, double dt) {
+    const bool have_cam = cam.valid;
+    const bool have_rad = rad.valid;
+
+    // ── 1. No detection from either sensor: coast then give up ───────────────
+    if (!have_cam && !have_rad) {
+        stale_timer_ += dt;
         confirm_count_ = 0;
-        candidate_id_  = -1;
         if (stale_timer_ >= p_.target_loss_timeout_s) {
-            prev_mio_id_    = -1;
-            last_valid_mio_ = {};
+            reset();
             return {};
         }
         return propagateGrace(dt, ego_v);
     }
 
     stale_timer_ = 0.0;
-    const double ttc_raw = computeTTC(raw.x, -raw.v_rel);
-    const bool bypass_confirm = (raw.x < p_.aeb_immediate_dist_m) ||
-                                (-raw.v_rel > p_.min_closing_speed_mps && ttc_raw < p_.ttc_aeb_s);
 
-    // -------- same target as last frame (or imminent threat): run the ABG -----
-    if (raw.id == prev_mio_id_ || bypass_confirm) {
-        prev_mio_id_   = raw.id;
-        confirm_count_ = p_.confirm_frames;
-        candidate_id_  = raw.id;
+    // Use camera ID as primary (better lateral); fall back to radar.
+    const int32_t primary_id = have_cam ? cam.id : rad.id;
 
-        if (last_valid_mio_.valid && !bypass_confirm) {
-            // Alpha-Beta-Gamma update. dt is validated > 0 and clamped, so we
-            // take ONE reciprocal and convert the three per-term divisions into
-            // multiplies (no safeDiv branches in the hot path).
-            const double dt2     = dt * dt;
-            const double inv_dt  = 1.0 / dt;
-            const double inv_dt2 = inv_dt * inv_dt;
+    // Bypass confirm gate for imminent threats.
+    const double x_ref    = have_cam ? cam.x : rad.x;
+    const double vrel_ref = have_cam ? cam.v_rel : rad.v_rel;
+    const double ttc_ref  = computeTTC(x_ref, -vrel_ref);
+    const bool bypass = (x_ref < p_.aeb_immediate_dist_m) ||
+                        (-vrel_ref > p_.min_closing_speed_mps && ttc_ref < p_.ttc_aeb_s);
 
-            const double x_pred = last_valid_mio_.x
-                                + last_valid_mio_.v_rel * dt
-                                + 0.5 * last_valid_mio_.a_rel * dt2;
-            const double v_pred = last_valid_mio_.v_rel + last_valid_mio_.a_rel * dt;
-            const double a_pred = last_valid_mio_.a_rel;
-
-            const double x_err = raw.x     - x_pred;
-            const double v_err = raw.v_rel - v_pred;
-
-            last_valid_mio_.x     = x_pred + p_.filter_alpha_pos * x_err;
-            last_valid_mio_.v_rel = v_pred
-                                  + p_.filter_beta_pos * (x_err * inv_dt)
-                                  + p_.filter_alpha_vel * v_err;
-
-            const double a_raw = a_pred
-                               + p_.filter_gamma_pos * (2.0 * x_err * inv_dt2)
-                               + p_.filter_beta_vel  * (v_err * inv_dt);
-            last_valid_mio_.a_rel = clampVal(a_raw,
-                                             -consts::ABG_A_REL_CLAMP_MPS2,
-                                              consts::ABG_A_REL_CLAMP_MPS2);
-
-            last_valid_mio_.v_abs        = ego_v + last_valid_mio_.v_rel;
-            last_valid_mio_.id           = raw.id;
-            last_valid_mio_.threat_score = raw.threat_score;
-        } else {
-            last_valid_mio_       = raw;
-            last_valid_mio_.a_rel = 0.0;
+    if (primary_id != prev_cam_id_ && !bypass) {
+        if (primary_id != candidate_id_) {
+            candidate_id_  = primary_id;
+            confirm_count_ = 0;
         }
-        return last_valid_mio_;
+        ++confirm_count_;
+        if (confirm_count_ < p_.confirm_frames) {
+            return propagateGrace(dt, ego_v);
+        }
     }
 
-    // -------- a different candidate: require N consistent frames --------------
-    if (raw.id != candidate_id_) {
-        candidate_id_  = raw.id;
-        confirm_count_ = 0;
-    }
-    ++confirm_count_;
-    if (confirm_count_ >= p_.confirm_frames) {
-        prev_mio_id_          = raw.id;
-        last_valid_mio_       = raw;
-        last_valid_mio_.a_rel = 0.0;
-        return raw;
+    prev_cam_id_   = primary_id;
+    confirm_count_ = p_.confirm_frames;
+
+    // ── 2. Predict ────────────────────────────────────────────────────────────
+    if (!kf_.initialised) {
+        const MioResult& src = have_cam ? cam : rad;
+        kfInit(kf_, src.x, src.v_rel, src.x_var, src.vx_var);
+    } else {
+        kfPredict(kf_, dt, p_.q_x, p_.q_v, p_.q_a);
     }
 
-    return propagateGrace(dt, ego_v);
+    // ── 3. Update — camera first, then radar ──────────────────────────────────
+    if (have_cam) {
+        kfUpdate(kf_, cam.x, cam.v_rel, cam.x_var, cam.vx_var);
+    }
+    if (have_rad) {
+        // Fusion gate: only use radar if it agrees with camera within fusion_gate_m.
+        // Without this check, camera tracking a car at 25 m and radar seeing a
+        // guardrail at 8 m would corrupt the fused estimate toward 8 m.
+        const bool agree = !have_cam ||
+                           (std::abs(cam.x - rad.x) < p_.fusion_gate_m);
+        if (agree) {
+            kfUpdate(kf_, rad.x, rad.v_rel, rad.x_var, rad.vx_var);
+        } else {
+            ROS_WARN_THROTTLE(2.0,
+                "[MioTracker] cam/rad mismatch cam=%.1fm rad=%.1fm (gate=%.1fm) "
+                "— radar update skipped this cycle",
+                cam.x, rad.x, p_.fusion_gate_m);
+        }
+    }
+
+    // ── 4. Build output ───────────────────────────────────────────────────────
+    MioResult out = toMioResult(ego_v);
+    out.threat_score = have_cam ? cam.threat_score : rad.threat_score;
+    out.id           = primary_id;
+    prev_rad_id_     = have_rad ? rad.id : prev_rad_id_;
+
+    last_valid_ = out;
+    return out;
 }
 
 void MioTracker::reset() noexcept {
-    last_valid_mio_ = {};
-    stale_timer_    = 0.0;
-    prev_mio_id_    = -1;
-    candidate_id_   = -1;
-    confirm_count_  = 0;
+    kf_            = KFState{};
+    stale_timer_   = 0.0;
+    prev_cam_id_   = -1;
+    prev_rad_id_   = -1;
+    candidate_id_  = -1;
+    confirm_count_ = 0;
+    last_valid_    = {};
 }
 
 KinResult computeKinematics(double ego_v, const MioResult& mio, const Params& p) {

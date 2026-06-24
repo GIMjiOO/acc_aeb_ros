@@ -64,6 +64,18 @@
          They do NOT trigger AEB — only ego-lane objects do. -->
     <param name="cut_in_lateral_factor" value="2.0"/>
 
+    <!-- Kalman filter process noise — increase q_x if filter lags sudden braking -->
+    <param name="q_x" value="0.5"/>
+    <param name="q_v" value="0.15"/>
+    <param name="q_a" value="0.05"/>
+
+    <!-- Fusion gate: max allowable range difference between camera MIO and radar MIO
+         before the radar update is skipped for that cycle.
+         If camera tracks a car at 25 m and radar locks onto a guardrail at 8 m,
+         the mismatch exceeds this gate and only the camera update is applied.
+         Increase if genuine targets are being rejected (sensor misalignment). -->
+    <param name="fusion_gate_m" value="3.0"/>
+
     <!-- debug_stall_once_s: TEST ONLY. Leave unset on the vehicle. -->
     <!-- <param name="debug_stall_once_s" value="0.5"/> -->
 

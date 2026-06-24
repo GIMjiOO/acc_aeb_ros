@@ -30,6 +30,13 @@ namespace consts {
     constexpr double DIAG_TTC_DISPLAY_CAP  = 99.9;   // cosmetic cap for reported TTC
     constexpr int    WATCHDOG_POLL_PERIOD_MS = 20;   // watchdog steady-clock poll period (50 Hz)
     constexpr double LOOP_OVERRUN_FACTOR   =  1.5;   // wall period > factor*dt_s counts as an overrun
+
+    // Variance fallbacks used when a publisher leaves x_var/vx_var at 0.0.
+    // Zero variance means infinite confidence — breaks the KF weight calculation.
+    constexpr double CAM_X_VAR_DEFAULT  = 1.00;   // camera depth is noisy (m²)
+    constexpr double CAM_VX_VAR_DEFAULT = 2.00;   // camera velocity is optical-flow derived (m²/s²)
+    constexpr double RAD_X_VAR_DEFAULT  = 0.10;   // radar range is accurate (m²)
+    constexpr double RAD_VX_VAR_DEFAULT = 0.05;   // radar Doppler is very accurate (m²/s²)
 }
 
 // --- ROS parameter defaults ---------------------------------------------------
@@ -76,6 +83,11 @@ namespace defaults {
     constexpr double FILTER_BETA_POS      = 0.20;
     constexpr double FILTER_GAMMA_POS     = 0.05;
     constexpr double FILTER_BETA_VEL      = 0.10;
+
+    constexpr double Q_X = 0.5;    // process noise scalar (m²/s⁵)
+    constexpr double Q_V = 0.15;   // process noise scalar for velocity (m²/s³)
+    constexpr double Q_A = 0.05;   // process noise scalar for acceleration (m²/s)
+    constexpr double FUSION_GATE_M = 3.0; // max cam/rad range difference to allow joint KF update (m)
     constexpr double MIO_WEIGHT_DIST      = 10.0;
     constexpr double MIO_WEIGHT_TTC       = 5.0;
     constexpr double VEHICLE_MASS_KG      = 10000.0;
@@ -176,6 +188,10 @@ struct Params {
     double radar_timeout_s, radar_fusion_dedup_m;
     double cam_health_timeout_s;   // warn threshold: camera empty while moving
     double cut_in_lateral_factor;  // adjacent-zone outer edge = factor × dynamic_half_w
+    double q_x;                    // KF process noise scalar (m²/s⁵), tune 0.1–2.0
+    double q_v;                    // KF process noise scalar for velocity (m²/s³)
+    double q_a;                    // KF process noise scalar for acceleration (m²/s)
+    double fusion_gate_m;          // max |cam.x - rad.x| to allow joint KF update (m)
 
     int    confirm_frames, aeb_confirm_frames, spinner_threads;
 
@@ -192,9 +208,26 @@ struct MioResult {
     double  v_rel        = 0.0;
     double  a_rel        = 0.0;
     double  threat_score = 0.0;
+    double  x_var        = 1.0;   // measurement variance on x  (m²)
+    double  vx_var       = 1.0;   // measurement variance on vx (m²/s²)
     int32_t id           = -1;
     bool    valid        = false;
     bool    stale        = false;
+};
+
+//==============================================================================
+//  Kalman filter state for one tracked object (longitudinal axis only).
+//  P is stored as upper-triangular: P[0]=Pxx P[1]=Pxv P[2]=Pxa
+//                                   P[3]=Pvv P[4]=Pva P[5]=Paa
+//==============================================================================
+struct KFState {
+    double x = 0.0;   // range (m)
+    double v = 0.0;   // relative velocity (m/s)
+    double a = 0.0;   // relative acceleration (m/s²)
+    double P[6] = {10.0, 0.0, 0.0,   // initial covariance — high uncertainty
+                    5.0, 0.0,
+                    2.0};
+    bool   initialised = false;
 };
 
 struct KinResult {

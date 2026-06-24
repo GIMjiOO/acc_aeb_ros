@@ -63,16 +63,16 @@ class AccAebSim:
         self._torque_nm = 0.0
         self._brake_g   = 0.0
 
-        # Publishers (QoS=1 matches the controller's subscriber queue sizes).
-        self._pub_vcu    = rospy.Publisher('/VCU_Data',
+        # Publishers — named _*_pub to avoid shadowing the _pub_* helper methods.
+        self._vcu_pub    = rospy.Publisher('/VCU_Data',
                                            VCU, queue_size=1)
-        self._pub_obj    = rospy.Publisher('/perception/camera/tracked_objects',
+        self._obj_pub    = rospy.Publisher('/perception/camera/tracked_objects',
                                            TrackedObjectArray, queue_size=1)
-        self._pub_lane_l = rospy.Publisher('/perception/lanes/left',
+        self._lane_l_pub = rospy.Publisher('/perception/lanes/left',
                                            LanePolynomial, queue_size=1)
-        self._pub_lane_r = rospy.Publisher('/perception/lanes/right',
+        self._lane_r_pub = rospy.Publisher('/perception/lanes/right',
                                            LanePolynomial, queue_size=1)
-        self._pub_target = rospy.Publisher('/planner/target_speed',
+        self._target_pub = rospy.Publisher('/planner/target_speed',
                                            Float32, queue_size=1)
 
         rospy.Subscriber('/control_value', control_data, self._ctrl_cb)
@@ -116,7 +116,7 @@ class AccAebSim:
     def _pub_vcu(self, ego_v_mps):
         msg = VCU()
         msg.MotorVelocity = float(ego_v_mps * MPS_TO_KPH)
-        self._pub_vcu.publish(msg)
+        self._vcu_pub.publish(msg)
 
     def _pub_objects(self, obj_list):
         """obj_list: list of (x_m, y_m, vx_world_mps, track_id)"""
@@ -128,17 +128,17 @@ class AccAebSim:
             o.vx = float(vx)   # world-frame (vx_is_relative=false in launch)
             o.id = int(oid)
             arr.objects.append(o)
-        self._pub_obj.publish(arr)
+        self._obj_pub.publish(arr)
 
     def _pub_lanes(self):
         """Straight flat lanes at ±1.75 m (bus half-width). Always valid."""
         l = LanePolynomial(); l.a = 0.0; l.b = 0.0; l.c =  1.75; l.is_valid = True
         r = LanePolynomial(); r.a = 0.0; r.b = 0.0; r.c = -1.75; r.is_valid = True
-        self._pub_lane_l.publish(l)
-        self._pub_lane_r.publish(r)
+        self._lane_l_pub.publish(l)
+        self._lane_r_pub.publish(r)
 
     def _pub_target_kph(self, kph):
-        self._pub_target.publish(Float32(data=float(kph * KPH_TO_MPS)))
+        self._target_pub.publish(Float32(data=float(kph * KPH_TO_MPS)))
 
     # -----------------------------------------------------------------------
     #  Status printer (called every ~0.5 s)

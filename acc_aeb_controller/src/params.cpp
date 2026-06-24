@@ -98,6 +98,10 @@ Params loadParams(ros::NodeHandle& nh) {
     p.radar_vx_is_relative    = gb("radar_vx_is_relative",   RADAR_VX_IS_RELATIVE);
     p.cam_health_timeout_s    = g("cam_health_timeout_s",    CAM_HEALTH_TIMEOUT_S);
     p.cut_in_lateral_factor   = g("cut_in_lateral_factor",   CUT_IN_LATERAL_FACTOR);
+    p.q_x                     = g("q_x",                     Q_X);
+    p.q_v                     = g("q_v",                     Q_V);
+    p.q_a                     = g("q_a",                     Q_A);
+    p.fusion_gate_m           = g("fusion_gate_m",           FUSION_GATE_M);
     return p;
 }
 
@@ -154,6 +158,10 @@ void validateParams(const Params& p) {
     requireCond(p.radar_fusion_dedup_m > 0.0, "radar_fusion_dedup_m must be strictly positive");
     requireCond(p.cam_health_timeout_s > 0.0, "cam_health_timeout_s must be strictly positive");
     requireCond(p.cut_in_lateral_factor > 1.0, "cut_in_lateral_factor must be > 1.0 (must extend beyond ego lane)");
+    requireCond(p.q_x > 0.0, "q_x must be strictly positive");
+    requireCond(p.q_v > 0.0, "q_v must be strictly positive");
+    requireCond(p.q_a > 0.0, "q_a must be strictly positive");
+    requireCond(p.fusion_gate_m > 0.0, "fusion_gate_m must be strictly positive");
 
     requireCond(p.follow_enter_ratio > 1.0, "follow_enter_ratio must be > 1.0");
     requireCond(p.follow_exit_ratio > p.follow_enter_ratio,
