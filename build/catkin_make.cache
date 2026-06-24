@@ -1,2 +1,2 @@
-acc_aeb_controller:npust_bus_msgs:pro_can
--DCATKIN_DEVEL_PREFIX=/home/nvidia/catkin_ws00/devel -DCMAKE_INSTALL_PREFIX=/home/nvidia/catkin_ws00/install -DCATKIN_WHITELIST_PACKAGES=acc_aeb_controller;npust_bus_msgs;pro_can -G Unix Makefiles
+acc_aeb_controller:acc_aeb_sim:beginner_tutorials:conti_radar_driver:npust_bus_msgs:nvcom:ouster-ros:pro_can:rplidar_ros:zed-ros-wrapper/zed-ros-interfaces:zed-ros-wrapper/zed_nodelets:zed-ros-wrapper/zed_ros:zed-ros-wrapper/zed_wrapper:zed_yolo
+-DCATKIN_WHITELIST_PACKAGES=radar_conti -DCATKIN_DEVEL_PREFIX=/home/nvidia/catkin_ws00/devel -DCMAKE_INSTALL_PREFIX=/home/nvidia/catkin_ws00/install -G Unix Makefiles

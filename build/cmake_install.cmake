@@ -146,9 +146,7 @@ endif()
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for each subdirectory.
   include("/home/nvidia/catkin_ws00/build/gtest/cmake_install.cmake")
-  include("/home/nvidia/catkin_ws00/build/npust_bus_msgs/cmake_install.cmake")
-  include("/home/nvidia/catkin_ws00/build/pro_can/cmake_install.cmake")
-  include("/home/nvidia/catkin_ws00/build/acc_aeb_controller/cmake_install.cmake")
+  include("/home/nvidia/catkin_ws00/build/conti_radar_driver/cmake_install.cmake")
 
 endif()
 

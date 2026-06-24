@@ -64,6 +64,100 @@ MioResult selectMIO(const PerceptionSnapshot& snap, double ego_v, const Params& 
 
     // Radar objects: skip any that coincide with a camera object to avoid
     // double-counting the same physical obstacle (Euclidean dedup in XY).
+    // Only suppress a radar object when the matching camera object is itself in-lane;
+    // an out-of-lane camera false detection must not block a valid radar detection.
+    if (!snap.radar_timeout && snap.radar_objects) {
+        const double dedup2 = p.radar_fusion_dedup_m * p.radar_fusion_dedup_m;
+        for (const auto& robj : snap.radar_objects->objects) {
+            bool covered = false;
+            if (!snap.cam_timeout && snap.objects) {
+                for (const auto& cobj : snap.objects->objects) {
+                    if (cobj.x <= p.min_valid_x_m || cobj.x > p.max_range_m) continue;
+                    if (!std::isfinite(cobj.x) || !std::isfinite(cobj.y)) continue;
+
+                    // Mirror the in-lane check from score() so an out-of-lane camera
+                    // object cannot suppress a valid in-lane radar detection.
+                    bool cam_in_lane = false;
+                    if (snap.lane_l.valid && snap.lane_r.valid) {
+                        const double x2  = cobj.x * cobj.x;
+                        const double y_l = snap.lane_l.a * x2 + snap.lane_l.b * cobj.x + snap.lane_l.c;
+                        const double y_r = snap.lane_r.a * x2 + snap.lane_r.b * cobj.x + snap.lane_r.c;
+                        if (std::abs(y_l - y_r) <= p.max_lane_width_m)
+                            cam_in_lane = (cobj.y <= std::max(y_l, y_r) && cobj.y >= std::min(y_l, y_r));
+                        else
+                            cam_in_lane = (std::abs(cobj.y) <= snap.dynamic_half_w);
+                    } else {
+                        cam_in_lane = (std::abs(cobj.y) <= snap.dynamic_half_w);
+                    }
+                    if (!cam_in_lane) continue;
+
+                    const double dx = robj.x - cobj.x;
+                    const double dy = robj.y - cobj.y;
+                    if (dx * dx + dy * dy < dedup2) { covered = true; break; }
+                }
+            }
+            if (!covered)
+                score(robj.x, robj.y, robj.vx, robj.id, p.radar_vx_is_relative);
+        }
+    }
+
+    return best;
+}
+
+MioResult selectAdjacentMIO(const PerceptionSnapshot& snap, double ego_v, const Params& p) {
+    MioResult best;
+    double    max_threat = -1.0;
+
+    // Returns true if `oy` is in the adjacent cut-in zone at longitudinal dist `ox`:
+    // outside the ego-lane boundary but within cut_in_lateral_factor × dynamic_half_w.
+    auto in_adjacent = [&](double ox, double oy) -> bool {
+        const double outer_w = snap.dynamic_half_w * p.cut_in_lateral_factor;
+
+        bool in_ego = false;
+        if (snap.lane_l.valid && snap.lane_r.valid) {
+            const double x2  = ox * ox;
+            const double y_l = snap.lane_l.a * x2 + snap.lane_l.b * ox + snap.lane_l.c;
+            const double y_r = snap.lane_r.a * x2 + snap.lane_r.b * ox + snap.lane_r.c;
+            if (std::abs(y_l - y_r) <= p.max_lane_width_m)
+                in_ego = (oy <= std::max(y_l, y_r) && oy >= std::min(y_l, y_r));
+            else
+                in_ego = (std::abs(oy) <= snap.dynamic_half_w);
+        } else {
+            in_ego = (std::abs(oy) <= snap.dynamic_half_w);
+        }
+        return !in_ego && (std::abs(oy) <= outer_w);
+    };
+
+    auto score = [&](double ox, double oy, double ovx, int32_t oid, bool vx_rel) {
+        if (ox <= p.min_valid_x_m || ox > p.max_range_m) return;
+        if (!std::isfinite(ox) || !std::isfinite(oy) || !std::isfinite(ovx)) return;
+
+        const double v_rel = vx_rel ? ovx : (ovx - ego_v);
+        if (std::abs(v_rel) > p.v_rel_plausible_max) return;
+        if (!in_adjacent(ox, oy)) return;
+
+        const double raw_ttc = computeTTC(ox, -v_rel);
+        const double threat  = (p.mio_weight_dist / std::max(consts::MIO_SCORE_EPS, ox)) +
+                               (p.mio_weight_ttc  / std::max(consts::MIO_SCORE_EPS, raw_ttc));
+
+        if (threat > max_threat) {
+            max_threat        = threat;
+            best.x            = ox;
+            best.id           = oid;
+            best.valid        = true;
+            best.threat_score = threat;
+            best.v_rel        = v_rel;
+            best.v_abs        = vx_rel ? (ego_v + ovx) : ovx;
+        }
+    };
+
+    // Camera objects in the adjacent zone.
+    if (!snap.cam_timeout && snap.objects) {
+        for (const auto& obj : snap.objects->objects)
+            score(obj.x, obj.y, obj.vx, obj.id, p.vx_is_relative);
+    }
+
+    // Radar objects — dedup against any nearby camera object (same logic as selectMIO).
     if (!snap.radar_timeout && snap.radar_objects) {
         const double dedup2 = p.radar_fusion_dedup_m * p.radar_fusion_dedup_m;
         for (const auto& robj : snap.radar_objects->objects) {

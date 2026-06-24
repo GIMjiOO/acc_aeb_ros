@@ -4,14 +4,14 @@ Vehicle plant model for live-camera testing.
 
 Subscribes to /control_value (controller output) and integrates simple
 vehicle dynamics to produce a realistic ego speed on /VCU_Data.
-Objects come from the real YOLO team — this node does NOT publish them.
+Objects and lane polynomials come from the real YOLO/perception team —
+this node does NOT publish them.
 
 Reuses the same physics constants as acc_aeb_sim so the controller sees
 a consistent vehicle model whether running scenarios or live camera tests.
 """
 import rospy
 from pro_can.msg import VCU, control_data
-from npust_bus_msgs.msg import LanePolynomial
 
 MASS_KG          = 10000.0
 WHEEL_R_M        = 0.478
@@ -37,9 +37,7 @@ class VehiclePlant:
         self._ego_v     = init_kph / MPS_TO_KPH
         self._dt        = dt_s
 
-        self._vcu_pub    = rospy.Publisher('/VCU_Data',              VCU,            queue_size=1)
-        self._lane_l_pub = rospy.Publisher('/perception/lanes/left', LanePolynomial, queue_size=1)
-        self._lane_r_pub = rospy.Publisher('/perception/lanes/right',LanePolynomial, queue_size=1)
+        self._vcu_pub = rospy.Publisher('/VCU_Data', VCU, queue_size=1)
 
         rospy.Subscriber('/control_value', control_data, self._ctrl_cb)
 
@@ -65,22 +63,12 @@ class VehiclePlant:
         msg.MotorVelocity = float(self._ego_v * MPS_TO_KPH)
         self._vcu_pub.publish(msg)
 
-    def _pub_lanes(self):
-        # Publish invalid lanes — controller falls back to dynamic half-width.
-        # Replace with real lane data when available.
-        l = LanePolynomial(); l.is_valid = False
-        r = LanePolynomial(); r.is_valid = False
-        self._lane_l_pub.publish(l)
-        self._lane_r_pub.publish(r)
-
     def run(self):
         rate  = rospy.Rate(1.0 / self._dt)
         t     = 0.0
         while not rospy.is_shutdown():
             self._step()
             self._pub_vcu()
-            if int(t / self._dt) % 4 == 0:   # lanes at ~5 Hz
-                self._pub_lanes()
             if int(t / self._dt) % 20 == 0:  # status every 1 s
                 rospy.loginfo('[PLANT] ego=%.1f km/h  T=%.0f Nm  B=%.3f g',
                               self._ego_v * MPS_TO_KPH,

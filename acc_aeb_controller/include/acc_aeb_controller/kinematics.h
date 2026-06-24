@@ -29,15 +29,24 @@ struct PerceptionSnapshot {
         double a = 0.0, b = 0.0, c = 0.0;
         bool   valid = false;
     } lane_l, lane_r;
-    double dynamic_half_w = 0.0;
-    bool   cam_timeout    = false;  // camera objects stale
-    bool   radar_timeout  = false;  // radar objects stale
+    double dynamic_half_w    = 0.0;
+    bool   cam_timeout       = false;  // camera objects stale
+    bool   radar_timeout     = false;  // radar objects stale
+    // Camera content health: seconds timestamp of last non-empty camera message
+    // (wall time as toSec(); 0.0 = never received).
+    double cam_nonempty_sec  = 0.0;
+    bool   cam_nonempty_ever = false;
 };
 
 [[nodiscard]] bool isLaneValid(const npust_bus_msgs::LanePolynomial& msg, const Params& p);
 
 // Pure association: pick the highest-threat in-lane object. No internal state.
 [[nodiscard]] MioResult selectMIO(const PerceptionSnapshot& snap, double ego_v, const Params& p);
+
+// Pick the highest-threat object in the ADJACENT zone (outside ego lane but
+// within cut_in_lateral_factor × dynamic_half_w). Used for cut-in awareness
+// diagnostics only — does NOT feed the AEB/state-machine pipeline.
+[[nodiscard]] MioResult selectAdjacentMIO(const PerceptionSnapshot& snap, double ego_v, const Params& p);
 
 // Pure kinematics for the (already tracked) MIO: time-to-collision and the
 // desired following distance.

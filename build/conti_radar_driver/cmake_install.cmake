@@ -109,3 +109,7 @@ if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_
   file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/radar_conti" TYPE FILE FILES "/home/nvidia/catkin_ws00/src/conti_radar_driver/package.xml")
 endif()
 
+if("x${CMAKE_INSTALL_COMPONENT}x" STREQUAL "xUnspecifiedx" OR NOT CMAKE_INSTALL_COMPONENT)
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/radar_conti" TYPE PROGRAM FILES "/home/nvidia/catkin_ws00/build/conti_radar_driver/catkin_generated/installspace/radar_bridge.py")
+endif()
+

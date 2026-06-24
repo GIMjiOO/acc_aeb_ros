@@ -74,6 +74,7 @@
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>socketcan_interface</exec_depend>
   <exec_depend>socketcan_bridge</exec_depend>
+  <exec_depend>npust_bus_msgs</exec_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->

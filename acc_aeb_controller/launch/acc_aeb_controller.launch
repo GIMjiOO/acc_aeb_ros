@@ -13,7 +13,7 @@
     <!-- IMPORTANT: set this to match your tracker's vx convention.
          true  = obj.vx is already relative to ego
          false = obj.vx is world-frame absolute (ego is subtracted internally) -->
-    <param name="vx_is_relative"     value="true"/>
+    <param name="vx_is_relative"     value="false"/>
 
     <!-- Following / spacing -->
     <param name="time_gap_s"         value="2.0"/>
@@ -51,6 +51,18 @@
     <!-- false = radar vx is world-frame absolute (ego is subtracted internally) -->
     <param name="radar_vx_is_relative"  value="true"/>
     <param name="radar_fusion_dedup_m"  value="2.0"/> <!-- objects within 2 m XY = same obstacle -->
+
+    <!-- Camera content-health warning threshold.
+         If camera keeps delivering empty arrays while ego is moving for longer than
+         this, a ROS_WARN is emitted every 10 s. NOT a FAULT (clear road is valid).
+         Increase if false positives appear on long straight stretches. -->
+    <param name="cam_health_timeout_s"  value="30.0"/>
+
+    <!-- Adjacent-lane cut-in zone width = factor × dynamic_half_w.
+         Objects between 1× and this factor × half-width are tracked for cut-in
+         awareness and reported in /diagnostics (adj_mio_x_m, adj_ttc_s).
+         They do NOT trigger AEB — only ego-lane objects do. -->
+    <param name="cut_in_lateral_factor" value="2.0"/>
 
     <!-- debug_stall_once_s: TEST ONLY. Leave unset on the vehicle. -->
     <!-- <param name="debug_stall_once_s" value="0.5"/> -->

@@ -120,6 +120,14 @@ namespace defaults {
     constexpr bool   RADAR_VX_IS_RELATIVE  = true;  // Doppler vx is ego-relative
 
     constexpr int    SPINNER_THREADS      = 2;      // ros::AsyncSpinner worker count
+
+    // Camera content-health: warn if camera sends empty arrays while ego is moving
+    // for longer than this. Not a FAULT (clear road is valid); diagnostic only.
+    constexpr double CAM_HEALTH_TIMEOUT_S  = 30.0;
+
+    // Adjacent-lane cut-in zone: objects between 1× and this factor × dynamic_half_w
+    // are tracked as potential cut-in threats and exposed in diagnostics.
+    constexpr double CUT_IN_LATERAL_FACTOR = 2.0;
 }
 
 // --- Enumerations -------------------------------------------------------------
@@ -166,6 +174,8 @@ struct Params {
     double follow_enter_ratio, follow_exit_ratio, min_stale_x_m, v_rel_plausible_max, ego_v_moving_thres;
     double watchdog_timeout_s;
     double radar_timeout_s, radar_fusion_dedup_m;
+    double cam_health_timeout_s;   // warn threshold: camera empty while moving
+    double cut_in_lateral_factor;  // adjacent-zone outer edge = factor × dynamic_half_w
 
     int    confirm_frames, aeb_confirm_frames, spinner_threads;
 

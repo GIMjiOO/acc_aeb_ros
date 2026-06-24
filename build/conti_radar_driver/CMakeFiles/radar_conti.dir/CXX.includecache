@@ -432,12 +432,6 @@ cstddef
 set
 -
 
-/home/nvidia/catkin_ws00/src/conti_radar_driver/src/radar_conti_class.cpp
-radar_conti_ars408_component.hpp
-/home/nvidia/catkin_ws00/src/conti_radar_driver/src/radar_conti_ars408_component.hpp
-iostream
--
-
 /home/nvidia/catkin_ws00/src/conti_radar_driver/src/radar_conti_init.cpp
 radar_conti_ars408_component.hpp
 /home/nvidia/catkin_ws00/src/conti_radar_driver/src/radar_conti_ars408_component.hpp

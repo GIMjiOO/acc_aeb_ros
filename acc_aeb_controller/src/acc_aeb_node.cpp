@@ -163,6 +163,9 @@ private:
         D_TARGET_KPH = 0, D_EGO_KPH, D_MIO_X, D_CLOSING, D_TTC,
         D_CMD, D_LANE_L, D_LANE_R, D_DYN_W, D_WD_TRIPS, D_FAULT_SRC, D_LOOP_OVERRUNS,
         D_CAM_OK, D_RAD_OK, D_OVERRIDE,
+        D_CAM_CONTENT,   // 1 = camera sending non-empty msgs recently; 0 = possible silent failure
+        D_ADJ_MIO_X,     // closest adjacent-lane object distance (m); -1 if none
+        D_ADJ_TTC,       // adjacent-lane object TTC (s); capped at 99.9
         D_COUNT
     };
     enum WdDiagIdx { WD_FROZEN_S = 0, WD_TRIP_COUNT, WD_COUNT };
@@ -192,7 +195,8 @@ private:
             "target_kph", "ego_kph", "mio_x_m", "closing_mps", "ttc_s",
             "cmd_mps2", "lane_l_valid", "lane_r_valid", "dynamic_half_w",
             "watchdog_trips", "fault_source", "loop_overruns",
-            "cam_ok", "rad_ok", "driver_override"
+            "cam_ok", "rad_ok", "driver_override",
+            "cam_content_ok", "adj_mio_x_m", "adj_ttc_s"
         };
         for (int i = 0; i < D_COUNT; ++i) {
             st.values[i].key = kKeys[i];
@@ -271,6 +275,10 @@ private:
         latest_objects_         = msg;
         last_obj_arrival_stamp_ = ros::Time::now();
         obj_ever_received_      = true;
+        if (!msg->objects.empty()) {
+            last_cam_nonempty_stamp_ = last_obj_arrival_stamp_;
+            cam_nonempty_ever_       = true;
+        }
     }
 
     void radarCb(const npust_bus_msgs::TrackedObjectArray::ConstPtr& msg) {
@@ -310,6 +318,8 @@ private:
         s.radar_objects = latest_radar_objects_;
         s.radar_timeout = !radar_ever_received_ ||
                           ((now - last_radar_arrival_stamp_).toSec() > p_.radar_timeout_s);
+        s.cam_nonempty_sec  = last_cam_nonempty_stamp_.toSec();
+        s.cam_nonempty_ever = cam_nonempty_ever_;
 
         const bool l_current = lane_l_valid_ && ((now - last_lane_l_arrival_stamp_).toSec() <= p_.sensor_timeout_s);
         const bool r_current = lane_r_valid_ && ((now - last_lane_r_arrival_stamp_).toSec() <= p_.sensor_timeout_s);
@@ -395,6 +405,31 @@ private:
         const MioResult mio     = tracker_.track(raw_mio, ego_v, actual_dt);
         const KinResult kin     = (mio.valid || mio.stale) ? computeKinematics(ego_v, mio, p_) : KinResult{};
 
+        // Adjacent-lane cut-in awareness (diagnostics only — not fed to state machine).
+        const MioResult adj_mio = !obj_stale ? selectAdjacentMIO(snap, ego_v, p_) : MioResult{};
+        const KinResult adj_kin = adj_mio.valid ? computeKinematics(ego_v, adj_mio, p_) : KinResult{};
+        if (adj_mio.valid) {
+            ROS_INFO_THROTTLE(2.0,
+                "[ACC/AEB] Adjacent-lane object: x=%.1fm TTC=%.1fs — monitor for cut-in.",
+                adj_mio.x, std::min(adj_kin.ttc, consts::DIAG_TTC_DISPLAY_CAP));
+        }
+
+        // Camera content health: camera can be alive (fresh messages) but broken
+        // (ZED sending all-NaN depth → YOLO publishes empty arrays continuously).
+        // We cannot FAULT here (a clear road with no objects is valid), but we warn
+        // the operator so they can inspect the sensor.
+        const bool cam_content_ok =
+            snap.cam_timeout ||          // cam stale → staleness FAULT handles it; skip this check
+            !snap.cam_nonempty_ever ||   // never received objects: clear road / startup
+            ego_v <= p_.ego_v_moving_thres ||  // stationary: objects may legitimately be absent
+            (now.toSec() - snap.cam_nonempty_sec) <= p_.cam_health_timeout_s;
+        if (!cam_content_ok) {
+            ROS_WARN_THROTTLE(10.0,
+                "[ACC/AEB] Camera delivering empty arrays for >%.0f s while moving "
+                "— possible sensor silent failure. Verify ZED hardware.",
+                p_.cam_health_timeout_s);
+        }
+
         const double target_speed = dynamic_target_speed_mps_.load(std::memory_order_relaxed);
         const ControlResult cr = sm_.step(mio, kin, ego_v, actual_dt, sensor_ok, target_speed);
 
@@ -433,7 +468,8 @@ private:
         // steering already zeroed in initControlMsgs()
         pub_ctrl_.publish(ctrl_msg_);
 
-        publishDiag(now, ego_v, snap, mio, kin, cr.accel_cmd, cr.act, fsrc);
+        publishDiag(now, ego_v, snap, mio, kin, cr.accel_cmd, cr.act, fsrc,
+                    adj_mio, adj_kin, cam_content_ok);
     }
 
     //--------------------------------------------------------------------------
@@ -532,7 +568,8 @@ private:
 
     void publishDiag(const ros::Time& now, double ego_v, const PerceptionSnapshot& snap,
                      const MioResult& mio, const KinResult& kin, double cmd, const ActCmd& act,
-                     FaultSrc fsrc) {
+                     FaultSrc fsrc,
+                     const MioResult& adj_mio, const KinResult& adj_kin, bool cam_content_ok) {
         const State  s        = sm_.state();
         const bool   has_mio  = (mio.valid || mio.stale);
         const double ttc_disp = std::min(kin.ttc, consts::DIAG_TTC_DISPLAY_CAP);
@@ -560,9 +597,14 @@ private:
         setDiagValue(st.values[D_WD_TRIPS],   static_cast<double>(watchdog_trip_count_.load(std::memory_order_relaxed)));
         st.values[D_FAULT_SRC].value.assign(faultSrcStr(fsrc));
         setDiagValue(st.values[D_LOOP_OVERRUNS], static_cast<double>(loop_overrun_count_));
-        setDiagValue(st.values[D_CAM_OK],    snap.cam_timeout   ? 0.0 : 1.0);
-        setDiagValue(st.values[D_RAD_OK],    snap.radar_timeout ? 0.0 : 1.0);
-        setDiagValue(st.values[D_OVERRIDE],  driver_override_active_.load(std::memory_order_relaxed) ? 1.0 : 0.0);
+        setDiagValue(st.values[D_CAM_OK],      snap.cam_timeout   ? 0.0 : 1.0);
+        setDiagValue(st.values[D_RAD_OK],      snap.radar_timeout ? 0.0 : 1.0);
+        setDiagValue(st.values[D_OVERRIDE],    driver_override_active_.load(std::memory_order_relaxed) ? 1.0 : 0.0);
+        setDiagValue(st.values[D_CAM_CONTENT], cam_content_ok ? 1.0 : 0.0);
+        setDiagValue(st.values[D_ADJ_MIO_X],  adj_mio.valid ? adj_mio.x : -1.0);
+        setDiagValue(st.values[D_ADJ_TTC],    adj_mio.valid
+                                                ? std::min(adj_kin.ttc, consts::DIAG_TTC_DISPLAY_CAP)
+                                                : consts::DIAG_TTC_DISPLAY_CAP);
 
         pub_diag_.publish(diag_msg_);
     }
@@ -614,9 +656,11 @@ private:
     ros::Time last_radar_arrival_stamp_{ros::Time(0)};
     ros::Time last_lane_l_arrival_stamp_{ros::Time(0)};
     ros::Time last_lane_r_arrival_stamp_{ros::Time(0)};
+    ros::Time last_cam_nonempty_stamp_{ros::Time(0)};  // wall time of last non-empty camera msg
     bool      obj_ever_received_{false};
     bool      radar_ever_received_{false};
     bool      lane_l_valid_{false}, lane_r_valid_{false};
+    bool      cam_nonempty_ever_{false};               // true once camera sent ≥1 object
 
     // Atomics fed by callbacks, read by the control loop.
     std::atomic<double> ego_v_mps_{0.0};
