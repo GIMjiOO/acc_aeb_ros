@@ -583,6 +583,127 @@ TEST(FusionGate, ZeroVarianceFallbackNoNaN)
     EXPECT_TRUE(std::isfinite(out.v_rel));
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  selectAdjacentMIO tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+// An object whose lateral position is inside the ego lane must NOT appear
+// in the adjacent cut-in zone even though it is the closest object ahead.
+TEST(SelectAdjacentMio, InLaneObjectNotReportedAsAdjacent)
+{
+    auto p = makeDefaultParams();
+    p.vx_is_relative      = true;
+    p.cut_in_lateral_factor = 2.0;
+
+    acc_aeb::PerceptionSnapshot snap;
+    snap.dynamic_half_w = 1.75;
+    snap.objects = makeObjects(30.0, /*y=*/0.5, -5.0, 1);  // |y|=0.5 < half_w=1.75
+
+    auto r = acc_aeb::selectAdjacentMIO(snap, 20.0, p);
+    EXPECT_FALSE(r.valid) << "In-lane object must not appear as adjacent";
+}
+
+// An object beyond the outer cut-in boundary must be filtered out.
+TEST(SelectAdjacentMio, ObjectBeyondCutInZoneIgnored)
+{
+    auto p = makeDefaultParams();
+    p.vx_is_relative      = true;
+    p.cut_in_lateral_factor = 2.0;
+
+    acc_aeb::PerceptionSnapshot snap;
+    snap.dynamic_half_w = 1.75;
+    // Outer edge = 2.0 × 1.75 = 3.5 m.  Object at y=4.0 → outside zone.
+    snap.objects = makeObjects(25.0, /*y=*/4.0, -3.0, 2);
+
+    auto r = acc_aeb::selectAdjacentMIO(snap, 20.0, p);
+    EXPECT_FALSE(r.valid) << "Object at y=4.0 m beyond outer cut-in edge (3.5 m) must be ignored";
+}
+
+// An object sitting between the ego-lane boundary and the outer cut-in edge
+// must be detected and its kinematics preserved.
+TEST(SelectAdjacentMio, AdjacentObjectDetected)
+{
+    auto p = makeDefaultParams();
+    p.vx_is_relative      = true;
+    p.cut_in_lateral_factor = 2.0;
+
+    acc_aeb::PerceptionSnapshot snap;
+    snap.dynamic_half_w = 1.75;
+    // y=2.5: outside lane (>1.75), inside cut-in zone (<3.5)
+    snap.objects = makeObjects(20.0, /*y=*/2.5, -6.0, 3);
+
+    auto r = acc_aeb::selectAdjacentMIO(snap, 20.0, p);
+    ASSERT_TRUE (r.valid)          << "Object in adjacent zone must be detected";
+    EXPECT_NEAR (r.x, 20.0, 1e-9);
+    EXPECT_NEAR (r.v_rel, -6.0, 1e-9);
+    EXPECT_EQ   (r.id, 3);
+}
+
+// When the camera is stale the radar must fill the adjacent zone independently.
+TEST(SelectAdjacentMio, RadarFillsAdjacentZoneWhenCameraStale)
+{
+    auto p = makeDefaultParams();
+    p.radar_vx_is_relative  = true;
+    p.cut_in_lateral_factor = 2.0;
+
+    acc_aeb::PerceptionSnapshot snap;
+    snap.dynamic_half_w = 1.75;
+    snap.cam_timeout    = true;
+    snap.radar_objects  = makeObjects(18.0, /*y=*/2.2, -4.0, 9);  // y=2.2 in adjacent zone
+
+    auto r = acc_aeb::selectAdjacentMIO(snap, 20.0, p);
+    ASSERT_TRUE(r.valid) << "Radar must fill the adjacent zone when camera is stale";
+    EXPECT_NEAR(r.x, 18.0, 1e-9);
+    EXPECT_EQ  (r.id, 9);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Driver override + sensor fault: FSM invariant
+// ─────────────────────────────────────────────────────────────────────────────
+
+// The node computes sm_sensor_ok = sensor_ok || override_active before calling
+// sm_.step(), so the FSM never sees sensor_ok=false while the driver has control.
+// This test verifies the underlying FSM invariant: sensor_ok=true with no MIO
+// keeps the machine in CRUISE and never triggers FAULT.
+TEST(StateMachine, SensorOkTruePreventsImmediateFault)
+{
+    auto p = makeDefaultParams();
+    acc_aeb::StateMachine sm(p);
+
+    for (int i = 0; i < 10; ++i) {
+        auto r = sm.step({}, {}, 20.0, p.dt_s, /*sensor_ok=*/true, p.target_speed_mps);
+        EXPECT_EQ(r.state, acc_aeb::State::CRUISE)
+            << "FSM must remain in CRUISE when sensor_ok=true (no MIO = clear road)";
+        EXPECT_NE(r.state, acc_aeb::State::FAULT)
+            << "FAULT must not trigger when sensor_ok=true";
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Adjacent MIO kinematics: linear TTC when a_rel is zero
+// ─────────────────────────────────────────────────────────────────────────────
+
+// selectAdjacentMIO() does not populate a_rel (no Kalman smoothing).
+// computeKinematics must fall back to the linear TTC path in that case.
+TEST(Kinematics, LinearTTCWhenARelIsZero)
+{
+    auto p = makeDefaultParams();
+    acc_aeb::MioResult mio;
+    mio.valid = true;
+    mio.x     = 10.0;
+    mio.v_rel = -8.0;   // closing at 8 m/s
+    mio.v_abs = 12.0;
+    mio.a_rel = 0.0;    // raw adjacent MIO: no acceleration estimate
+
+    auto k = acc_aeb::computeKinematics(20.0, mio, p);
+
+    EXPECT_NEAR(k.closing_spd, 8.0, 1e-9);
+    EXPECT_NEAR(k.ttc, 10.0 / 8.0, 0.01)   // 1.25 s
+        << "Linear TTC (x / closing_spd) must apply when a_rel is zero";
+    EXPECT_LT(k.ttc, p.ttc_aeb_s)
+        << "This scenario is within AEB threshold — direct AEB promotion should fire";
+}
+
 int main(int argc, char** argv)
 {
     ros::Time::init();   // required for ROS_WARN_THROTTLE used in kinematics.cpp

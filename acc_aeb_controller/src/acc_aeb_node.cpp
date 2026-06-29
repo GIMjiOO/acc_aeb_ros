@@ -407,15 +407,40 @@ private:
         const MioResult rad_raw = (!snap.radar_timeout && snap.radar_objects)
                                   ? selectMIO(snap, ego_v, p_, SensorSource::RADAR_ONLY)
                                   : MioResult{};
-        const MioResult mio     = tracker_.track(cam_raw, rad_raw, ego_v, actual_dt);
-        const KinResult kin     = (mio.valid || mio.stale) ? computeKinematics(ego_v, mio, p_) : KinResult{};
 
-        // Adjacent-lane cut-in awareness (diagnostics only — not fed to state machine).
+        // Adjacent MIO is computed before the tracker so an imminent cut-in can be
+        // escalated to the FSM before the vehicle finishes crossing the lane line.
+        //
+        // DIRECT AEB PROMOTION only (no pre-warm):
+        //   When adj_kin.ttc < ttc_aeb_s we bypass the tracker and route the raw
+        //   adjacent MIO straight to the FSM.  Pre-warming the tracker at the wider
+        //   ttc_warn_s threshold was removed: longitudinal TTC alone cannot distinguish
+        //   a genuine cut-in from ego overtaking a slower adjacent vehicle, and that
+        //   misidentification would trigger false WARN braking on a bus route with
+        //   mixed-speed traffic.
         const MioResult adj_mio = !obj_stale ? selectAdjacentMIO(snap, ego_v, p_) : MioResult{};
         const KinResult adj_kin = adj_mio.valid ? computeKinematics(ego_v, adj_mio, p_) : KinResult{};
+
         if (adj_mio.valid) {
             ROS_INFO_THROTTLE(2.0,
-                "[ACC/AEB] Adjacent-lane object: x=%.1fm TTC=%.1fs — monitor for cut-in.",
+                "[ACC/AEB] Adjacent-lane object: x=%.1fm TTC=%.1fs — monitoring for cut-in.",
+                adj_mio.x, std::min(adj_kin.ttc, consts::DIAG_TTC_DISPLAY_CAP));
+        }
+
+        const MioResult mio = tracker_.track(cam_raw, rad_raw, ego_v, actual_dt);
+        const KinResult kin = (mio.valid || mio.stale) ? computeKinematics(ego_v, mio, p_) : KinResult{};
+
+        // Direct AEB promotion: bypass the tracker when the adjacent object is at
+        // AEB-level TTC and is more urgent than whatever the tracker currently holds.
+        MioResult fsm_mio = mio;
+        KinResult fsm_kin = kin;
+        if (adj_mio.valid && adj_kin.ttc < p_.ttc_aeb_s &&
+            (!mio.valid || adj_kin.ttc < kin.ttc)) {
+            fsm_mio = adj_mio;
+            fsm_kin = adj_kin;
+            ROS_WARN_THROTTLE(0.5,
+                "[ACC/AEB] CUT-IN AEB: adjacent x=%.1fm TTC=%.1fs "
+                "— direct AEB trigger (vehicle may not yet be fully in ego lane).",
                 adj_mio.x, std::min(adj_kin.ttc, consts::DIAG_TTC_DISPLAY_CAP));
         }
 
@@ -435,8 +460,14 @@ private:
                 p_.cam_health_timeout_s);
         }
 
-        const double target_speed = dynamic_target_speed_mps_.load(std::memory_order_relaxed);
-        const ControlResult cr = sm_.step(mio, kin, ego_v, actual_dt, sensor_ok, target_speed);
+        const double target_speed  = dynamic_target_speed_mps_.load(std::memory_order_relaxed);
+        const bool override_active = driver_override_active_.load(std::memory_order_relaxed);
+        // When driver override is active, shield the FSM from the sensor-stale signal
+        // so it never enters FAULT and never applies the fault brake against the driver.
+        // Stale sensors while override is active = degraded manual driving, not a fault.
+        // The warning block below tells the operator that AEB is non-functional.
+        const bool sm_sensor_ok = sensor_ok || override_active;
+        const ControlResult cr = sm_.step(fsm_mio, fsm_kin, ego_v, actual_dt, sm_sensor_ok, target_speed);
 
         if (!std::isfinite(cr.accel_cmd)) {
             ROS_ERROR_THROTTLE(1.0, "[ACC/AEB] FATAL: NaN in longitudinal command. Forcing safe stop.");
@@ -454,15 +485,26 @@ private:
             last_state_ = cr.state;
         }
 
-        // Driver override suspends ACC (CRUISE/FOLLOW) but AEB/WARN/FAULT remain armed.
-        // Publishes neutral (0 torque, 0 brake) so the driver has full authority.
-        const bool override_active = driver_override_active_.load(std::memory_order_relaxed);
         if (override_active != prev_override_state_) {
             if (override_active) ROS_WARN("[ACC/AEB] Driver override ACTIVE — ACC suspended.");
             else                 ROS_WARN("[ACC/AEB] Driver override released — ACC resuming.");
             prev_override_state_ = override_active;
         }
 
+        // Sensors are actually stale even though the FSM doesn't know (sm_sensor_ok masked it).
+        // Warn loudly so the operator knows AEB cannot activate until sensors recover.
+        if (override_active && !sensor_ok) {
+            ROS_WARN_THROTTLE(5.0,
+                "[ACC/AEB] DRIVER OVERRIDE + SENSOR FAULT (%s): "
+                "AEB / ADAS NON-FUNCTIONAL — driver has full authority. "
+                "AEB CANNOT protect occupants until sensors recover. "
+                "Restore sensor feed before relying on AEB.",
+                faultSrcStr(fsrc));
+        }
+
+        // Driver override suspends ACC (CRUISE/FOLLOW) but AEB/WARN remain armed.
+        // Because sm_sensor_ok keeps the FSM in CRUISE when sensors are stale + override active,
+        // suppress_acc already covers all override cases — no separate suppress_fault needed.
         const bool suppress_acc = override_active &&
                                   (cr.state == State::CRUISE || cr.state == State::FOLLOW);
         if (suppress_acc) sm_.onDriverOverride();
@@ -473,7 +515,7 @@ private:
         // steering already zeroed in initControlMsgs()
         pub_ctrl_.publish(ctrl_msg_);
 
-        publishDiag(now, ego_v, snap, mio, kin, cr.accel_cmd, cr.act, fsrc,
+        publishDiag(now, ego_v, snap, fsm_mio, fsm_kin, cr.accel_cmd, cr.act, fsrc,
                     adj_mio, adj_kin, cam_content_ok);
     }
 
